@@ -5,5 +5,7 @@ recursive-include tests *.py *.json *.sse *.txt *.md
 recursive-include scripts *.py
 recursive-exclude * __pycache__ *.pyc
 
-# Exclude local images even when a cached manifest previously included them.
+# Exclude unreviewed local images, including entries in cached manifests.
 prune docs/images
+
+include docs/images/dashboard-demo.jpg docs/images/content-demo.jpg

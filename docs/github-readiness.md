@@ -4,8 +4,9 @@
 
 The repository contains application source, controlled test fixtures, dependency
 pins, documentation, and GitHub workflows. Local environments, runtime databases,
-configuration secrets, archives, caches, implementation notes, and session
-screenshots are excluded.
+configuration secrets, archives, caches, implementation notes, and unreviewed
+session screenshots are excluded. The two README images use controlled demo
+traffic with anonymized model and upstream request identifiers.
 
 Published fixtures use generic model names, response IDs, request IDs, and
 timestamps. They preserve usage and timing values needed by the tests, along

@@ -4,6 +4,11 @@ A local statistics dashboard and HTTP proxy for Gufo inference servers. Route
 clients through the dashboard to track token usage, throughput, latency, cache
 hits, and speculative decoding over time.
 
+![Gufo Dashboard showing live metrics, throughput charts, request activity, and individual timings](docs/images/dashboard-demo.jpg)
+
+*Real measurements from 12 controlled demo requests. Model and upstream request
+identifiers are anonymized; these figures illustrate the interface, not a benchmark.*
+
 ## What it does
 
 - Tracks requests across Chat Completions, Completions, Responses, Messages, and
@@ -83,6 +88,11 @@ the added usage event before returning the stream. See the
 other exceptions.
 
 ## Optional question-and-answer audit
+
+![Optional content capture showing a demo question and generated answer](docs/images/content-demo.jpg)
+
+*The Content view shows a controlled demo prompt and answer. Text capture is off
+by default.*
 
 Text capture is off by default. To enable it with Docker Compose, edit **`.env`
 beside `docker-compose.yml`**:
