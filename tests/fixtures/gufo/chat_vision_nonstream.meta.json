@@ -1,0 +1,35 @@
+{
+  "method": "POST",
+  "path": "/v1/chat/completions",
+  "request": {
+    "model": "fixture-model-a",
+    "max_tokens": 16,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What colour is this?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "<16x16 red PNG data URI>"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "Server-Timing": "ttft;dur=421.068, inter_token;dur=28.745, max_inter_token;dur=133.079",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}

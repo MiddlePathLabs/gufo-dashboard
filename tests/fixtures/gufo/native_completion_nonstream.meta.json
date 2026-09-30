@@ -1,0 +1,18 @@
+{
+  "method": "POST",
+  "path": "/completion",
+  "request": {
+    "prompt": "Hello",
+    "n_predict": 16
+  },
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "Server-Timing": "ttft;dur=4.432, inter_token;dur=39.614, max_inter_token;dur=106.763",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/v1/responses",
+  "request": {
+    "model": "fixture-model-a",
+    "input": "Say hi",
+    "max_output_tokens": 16
+  },
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "Server-Timing": "ttft;dur=7.104, inter_token;dur=30.883, max_inter_token;dur=83.132",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}

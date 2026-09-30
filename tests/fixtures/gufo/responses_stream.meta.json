@@ -1,0 +1,22 @@
+{
+  "method": "POST",
+  "path": "/v1/responses",
+  "request": {
+    "model": "fixture-model-a",
+    "input": "Say hi",
+    "max_output_tokens": 16,
+    "stream": true
+  },
+  "status": 200,
+  "headers": {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "X-Request-ID": "fixture-request",
+    "Transfer-Encoding": "chunked",
+    "Connection": "close"
+  }
+}

@@ -1,0 +1,15 @@
+# HELP llamacpp:prompt_tokens_total Total prompt tokens processed
+# TYPE llamacpp:prompt_tokens_total counter
+llamacpp:prompt_tokens_total 14049
+# HELP llamacpp:tokens_predicted_total Total tokens generated
+# TYPE llamacpp:tokens_predicted_total counter
+llamacpp:tokens_predicted_total 2758
+# HELP llamacpp:prompt_tokens_seconds Prompt processing speed in tokens per second
+# TYPE llamacpp:prompt_tokens_seconds gauge
+llamacpp:prompt_tokens_seconds 14.5427
+# HELP llamacpp:predicted_tokens_seconds Generation speed in tokens per second
+# TYPE llamacpp:predicted_tokens_seconds gauge
+llamacpp:predicted_tokens_seconds 34.7948
+# HELP llamacpp:kv_cache_usage_ratio KV cache usage ratio
+# TYPE llamacpp:kv_cache_usage_ratio gauge
+llamacpp:kv_cache_usage_ratio 0.0

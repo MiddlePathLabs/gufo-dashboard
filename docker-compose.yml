@@ -1,0 +1,17 @@
+services:
+  gufo-dashboard:
+    build:
+      context: .
+      args:
+        # match the owner of ./data on the host
+        UID: ${APP_UID:-1000}
+        GID: ${APP_GID:-1000}
+    container_name: gufo-dashboard
+    # Host networking (Linux): Gufo's published :8080 is reachable at
+    # 127.0.0.1 without joining Gufo's compose project. See README for the
+    # bridge-network alternative in docs/deployment.md.
+    network_mode: host
+    env_file: .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

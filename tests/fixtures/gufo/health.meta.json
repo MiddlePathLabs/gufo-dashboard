@@ -1,0 +1,14 @@
+{
+  "method": "GET",
+  "path": "/health",
+  "request": null,
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "method": "GET",
+  "path": "/metrics",
+  "request": null,
+  "status": 200,
+  "headers": {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "Content-Type": "text/plain; version=0.0.4",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}

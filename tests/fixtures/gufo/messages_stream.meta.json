@@ -1,0 +1,24 @@
+{
+  "method": "POST",
+  "path": "/v1/messages",
+  "request": {
+    "model": "fixture-model-a",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Say hi"
+      }
+    ],
+    "max_tokens": 16,
+    "stream": true
+  },
+  "status": 400,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}

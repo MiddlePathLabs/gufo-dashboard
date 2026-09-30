@@ -1,0 +1,54 @@
+[project]
+name = "gufo-dashboard"
+version = "0.1.0"
+description = "Transparent OpenAI-compatible proxy + stats dashboard for a local Gufo inference server"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+]
+
+[project.urls]
+Repository = "https://github.com/MiddlePathLabs/gufo-dashboard"
+Issues = "https://github.com/MiddlePathLabs/gufo-dashboard/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+include-package-data = false
+
+[tool.setuptools.package-data]
+app = ["static/*", "static/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true

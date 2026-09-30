@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/v1/completions",
+  "request": {
+    "model": "fixture-model-a",
+    "prompt": "Hello",
+    "max_tokens": 16
+  },
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "Server-Timing": "ttft;dur=5.843, inter_token;dur=29.850, max_inter_token;dur=106.963",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "method": "POST",
+  "path": "/v1/chat/completions",
+  "request": {
+    "model": "fixture-model-a",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Say hi"
+      }
+    ],
+    "max_tokens": 16,
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  },
+  "status": 200,
+  "headers": {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    "X-Request-ID": "fixture-request",
+    "Transfer-Encoding": "chunked",
+    "Connection": "close"
+  }
+}

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gufo Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='9' width='3' height='6' fill='%236aa9ff'/%3E%3Crect x='6.5' y='5' width='3' height='10' fill='%236aa9ff'/%3E%3Crect x='12' y='1' width='3' height='14' fill='%236aa9ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1 class="title">Gufo Dashboard</h1>
+    <span class="proxy-url" title="Point clients here instead of :8080">
+      <code id="proxy-url">…</code>
+      <button id="copy-url" class="icon-btn" type="button" title="Copy base URL" aria-label="Copy base URL">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+      </button>
+    </span>
+  </div>
+  <div class="gufo-status">
+    <span id="status-dot" class="dot dot-unknown" aria-hidden="true"></span>
+    <span id="status-text" class="muted">connecting…</span>
+    <span class="sep"></span>
+    <span class="kv"><span class="k">Current model</span><span id="cur-model" class="v mono">—</span></span>
+    <span class="kv"><span class="k">Context</span><span id="cur-ctx" class="v num">—</span></span>
+    <span class="kv" title="Time since the dashboard first saw Gufo ready after the last down / counter reset. Gufo does not report uptime."><span class="k">observed ready</span><span id="ready-for" class="v num">—</span></span>
+  </div>
+</header>
+<div class="toolbar">
+  <div class="controls">
+    <label class="select"><span>Viewing model</span>
+      <select id="model-filter"><option value="">All models</option></select>
+    </label>
+    <div id="range" class="seg" role="group" aria-label="Time range">
+      <button type="button" data-range="1h">1h</button>
+      <button type="button" data-range="24h">24h</button>
+      <button type="button" data-range="7d">7d</button>
+      <button type="button" data-range="30d">30d</button>
+      <button type="button" data-range="all">All time</button>
+    </div>
+  </div>
+  <div class="refresh-controls">
+    <span id="refresh-ind" class="refresh" aria-hidden="true"></span>
+    <span id="refresh-text">Connecting…</span>
+    <span id="capture-status" class="muted">Content capture off</span>
+    <button id="clear-content" class="btn" type="button">Clear captured content</button>
+    <button id="pause" class="btn" type="button" aria-pressed="false">Pause</button>
+    <button id="retry-refresh" class="btn" type="button" hidden>Retry</button>
+  </div>
+</div>
+
+<main>
+  <section class="cards" id="cards" aria-label="Live health and performance">
+    <div class="card" data-card="inflight"><div class="label">In flight</div><div class="value num" id="c-inflight">—</div><div class="sub" id="c-inflight-sub">&nbsp;</div></div>
+    <div class="card" data-card="decode" title="Weighted decode: 1000 × summed generated tokens / summed decode milliseconds."><div class="label">Weighted decode</div><div class="value num" id="c-decode">—</div><div class="sub" id="c-decode-sub">&nbsp;</div></div>
+    <div class="card" data-card="prefill" title="Weighted prefill: 1000 × summed prefilled tokens / summed prefill milliseconds."><div class="label">Weighted prefill</div><div class="value num" id="c-prefill">—</div><div class="sub" id="c-prefill-sub">&nbsp;</div></div>
+    <div class="card" data-card="ttft"><div class="label">TTFT p50</div><div class="value num" id="c-ttft">—</div><div class="sub" id="c-ttft-sub">&nbsp;</div></div>
+    <div class="card" data-card="errors"><div class="label">Error rate</div><div class="value num" id="c-errors">—</div><div class="sub" id="c-errors-sub">&nbsp;</div></div>
+  </section>
+  <div id="model-hint" class="model-hint" hidden><span>Select a model to see throughput, first-token latency, cache hits, and draft acceptance.</span><button id="choose-model" class="btn" type="button">Choose a model</button></div>
+  <section class="cards secondary-cards" aria-label="Volume and efficiency">
+    <div class="card" data-card="requests"><div class="label">Requests</div><div class="value num" id="c-requests">—</div><div class="sub" id="c-requests-sub">&nbsp;</div></div>
+    <div class="card" data-card="gen"><div class="label">Generated tokens</div><div class="value num" id="c-gen">—</div><div class="sub" id="c-gen-sub">&nbsp;</div></div>
+    <div class="card" data-card="prompt"><div class="label">Prompt tokens</div><div class="value num" id="c-prompt">—</div><div class="sub" id="c-prompt-sub">&nbsp;</div></div>
+    <div class="card" data-card="cache"><div class="label">Cache hit</div><div class="value num" id="c-cache">—</div><div class="sub" id="c-cache-sub">&nbsp;</div></div>
+    <div class="card" data-card="draft"><div class="label">Draft acceptance</div><div class="value num" id="c-draft">—</div><div class="sub" id="c-draft-sub">&nbsp;</div></div>
+  </section>
+
+  <section class="row-charts">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Requests &amp; generated tokens</h2>
+        <span class="legend"><i class="sw sw-bar"></i>requests <i class="sw sw-line"></i>generated tokens</span>
+      </div>
+      <div class="chart-box"><canvas id="chart-primary" aria-label="Requests and generated tokens over time" role="img"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <div class="tabs" id="chart-tabs" role="tablist">
+          <button type="button" role="tab" data-metric="decode_tps">Decode tok/s</button>
+          <button type="button" role="tab" data-metric="prefill_tps">Prefill tok/s</button>
+          <button type="button" role="tab" data-metric="ttft_p50_ms">TTFT</button>
+          <button type="button" role="tab" data-metric="draft_acceptance">Draft acc.</button>
+          <button type="button" role="tab" data-metric="cache_hit_rate">Cache hit</button>
+        </div>
+        <span class="legend" id="secondary-legend"></span>
+      </div>
+      <div class="chart-box"><canvas id="chart-secondary" aria-label="Per-model metric over time" role="img"></canvas></div>
+    </div>
+    <div class="panel insights">
+      <div class="panel-head">
+        <div class="tabs" id="insight-tabs" role="tablist">
+          <button type="button" role="tab" data-tab="spec">Speculative</button>
+          <button type="button" role="tab" data-tab="cache">Cache</button>
+          <button type="button" role="tab" data-tab="gufo">Gufo counters</button>
+        </div>
+      </div>
+      <div class="insight-body" id="insight-body"></div>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="panel feed">
+      <div class="panel-head">
+        <h2>Activity</h2>
+        <div class="seg small" id="feed-filter" role="group" aria-label="Activity filter">
+          <button type="button" data-filter="all">All</button>
+          <button type="button" data-filter="errors">Errors</button>
+          <button type="button" data-filter="content">With content</button>
+          <button type="button" data-filter="partial">Incomplete</button>
+          <button type="button" data-filter="vision">Vision</button>
+          <button type="button" data-filter="streaming">Streaming</button>
+        </div>
+      </div>
+      <div class="feed-head">
+        <span>time</span><span id="feed-endpoint-label">endpoint</span><span class="r">tokens</span><span class="r">decode/s</span><span class="r">duration</span><span class="sr">status</span>
+      </div>
+      <div class="feed-list" id="feed-list" tabindex="0" role="list" aria-label="Activity feed. Use up and down arrows to inspect requests."></div>
+    </div>
+    <div class="panel detail" id="detail" role="region" aria-labelledby="detail-title">
+      <div class="panel-head"><h2 id="detail-title">Selected request <span class="muted" id="detail-id"></span></h2><button id="close-detail" class="btn" type="button">Close</button></div>
+      <div id="detail-tabs" class="seg" role="group" aria-label="Request view" hidden><button type="button" data-view="metrics" aria-pressed="true">Metrics</button><button type="button" data-view="content" aria-pressed="false">Content</button></div>
+      <div id="content-body" class="detail-body" hidden></div>
+      <div class="detail-body" id="detail-body"><p class="empty">Select a request in the activity feed.</p></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="content-clear-dialog">
+  <form method="dialog">
+    <h3>Clear captured content?</h3>
+    <p>Deletes saved questions and answers. Usage statistics remain. Backups may retain older copies.</p>
+    <div class="dialog-actions"><button value="cancel" class="btn" type="submit">Cancel</button><button value="clear" class="btn danger" type="submit">Clear content</button></div>
+  </form>
+</dialog>
+<dialog id="clear-dialog">
+  <form method="dialog">
+    <h3>Clear all stats?</h3>
+    <p>Deletes all captured content and every recorded request, event, metrics snapshot and the all-time rollup. This cannot be undone. Gufo itself is not affected.</p>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn" type="submit">Cancel</button>
+      <button value="clear" class="btn danger" type="submit">Clear stats</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

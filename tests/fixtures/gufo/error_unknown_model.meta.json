@@ -1,0 +1,23 @@
+{
+  "method": "POST",
+  "path": "/v1/chat/completions",
+  "request": {
+    "model": "nope",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Say hi"
+      }
+    ],
+    "max_tokens": 4
+  },
+  "status": 404,
+  "headers": {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+    "X-Request-ID": "fixture-request",
+    "Connection": "close"
+  }
+}
