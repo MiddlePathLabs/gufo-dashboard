@@ -165,7 +165,13 @@
     const inf = s.in_flight || { count: 0, items: [] };
     const scoped = state.model ? (inf.per_model?.[state.model] || 0) : inf.count;
     setCard("inflight", fInt(scoped), inf.items.length ? `oldest ${fDur(Math.max(...inf.items.map((i) => i.elapsed_ms)))}` : state.model && inf.count !== scoped ? `${inf.count} total` : "idle");
-    if (state.insight === "gufo") renderInsights();
+    const progress = inf.items.filter((i) => (!state.model || i.model === state.model) && i.phase === "prefill" && i.prompt_progress);
+    if (progress.length) {
+      const item = progress.sort((a, b) => a.started_at_ms - b.started_at_ms)[0];
+      const p = item.prompt_progress;
+      $("c-inflight-sub").textContent = `Prefill: ${fCompact(p.cache)} cached / ${fCompact(p.processed)} processed / ${fCompact(p.total)} total`;
+    }
+    if (state.insight === "gufo" || state.insight === "cache") renderInsights();
   }
 
   // ------------------------------------------------------------------- cards
@@ -362,6 +368,32 @@
   function modelHead(name, many) {
     return many ? `<div class="model-h" title="${esc(name)}">${esc(name || "(unknown model)")}</div>` : "";
   }
+  function cachePressureView() {
+    const p = state.status?.cache_pressure;
+    const heading = '<h3 class="insight-subhead">CURRENT GUFO CACHE PRESSURE</h3>';
+    if (!p?.available) return heading + '<p class="note">Cache diagnostics unavailable' + (p?.status === "stale" ? " (observer stale)." : ".") + '</p>';
+    const bytes = (n) => isNum(n) ? `${(n / (1024 ** 3)).toFixed(2)} GiB` : DASH;
+    const rows = [
+      ["RAM snapshot slots (limit)", fInt(p.snapshot_entry_limit)],
+      ["RAM snapshot budget", bytes(p.ram_capacity_bytes)],
+      ["Observed RAM entry evictions", fInt(p.ram_entry_evictions)],
+      ["RAM captures skipped", fInt(p.ram_skipped)],
+      ["Disk snapshot budget", bytes(p.disk_capacity_bytes)],
+      ["Observed disk LRU evictions", fInt(p.disk_lru_evictions)],
+      ["Disk captures skipped", fInt(p.disk_skipped)],
+      ["Gufo version", esc(p.gufo_version || "unknown")],
+      ["Log level", esc(p.log_level || "unknown")],
+      ["Log window starts", isNum(p.window_start_ms) ? esc(fDateTime(p.window_start_ms)) : DASH],
+    ];
+    const events = (p.events || []).slice(-5).reverse().map((e) => [
+      `${fDateTime(e.ts_ms)} · ${e.tier === "ram" ? "RAM" : "Disk"}`,
+      esc(`${e.action} · ${e.reason}`),
+    ]);
+    return heading + kvRows(rows) + '<p class="note">Current server, retained log window. RAM counts cover entry-limit evictions only; byte-limit removals and live slot occupancy are not reported. Missing values are unavailable.</p>'
+      + (p.log_level === "warn" || p.log_level === "error" ? '<p class="note warn">Restricted log level hides capacity startup lines and disk LRU events. Use info or debug for coverage.</p>' : '')
+      + (events.length ? '<h3 class="insight-subhead">RECENT CACHE PRESSURE EVENTS</h3>' + kvRows(events) : '');
+  }
+
   function renderInsights() {
     const body = $("insight-body");
     if (state.insight === "spec") {
@@ -378,7 +410,7 @@
     } else if (state.insight === "cache") {
       if (!cache) { body.innerHTML = ""; return; }
       const list = cache.per_model;
-      if (!list.length) { body.innerHTML = `<p class="note">No requests in this range.</p>`; return; }
+      if (!list.length) { body.innerHTML = `<p class="note">No requests in this range.</p>` + cachePressureView(); return; }
       body.innerHTML = list.map((m) => {
         const reasons = Object.entries(m.miss_reasons || {}).sort((a, b) => b[1] - a[1]);
         return modelHead(m.model, list.length > 1) + kvRows([
@@ -391,7 +423,7 @@
           ["Saved prefill (estimate)", isNum(m.saved_prefill_s_estimate) ? fMs(m.saved_prefill_s_estimate * 1000) : DASH,
             "Σ cached tokens ÷ this model's weighted prefill tok/s. An estimate."],
         ]) + (reasons.length ? `<h3 class="insight-subhead">MISS REASONS</h3>${kvRows(reasons.map(([r, n]) => [r, fInt(n)]))}` : "");
-      }).join("") + `<p class="note">Saved prefill is an estimate.${state.range === "all" ? " Miss reasons cover retained rows only." : ""}</p>`;
+      }).join("") + `<p class="note">Saved prefill is an estimate.${state.range === "all" ? " Miss reasons cover retained rows only." : ""}</p>` + cachePressureView();
     } else {
       const s = state.status;
       if (!s) { body.innerHTML = ""; return; }
@@ -400,16 +432,18 @@
       const p = s.pipeline || {};
       let un = DASH, unNote = "";
       if (!u.available) unNote = "Waiting for an idle moment to take a baseline.";
-      else if (s.in_flight.count > 0) unNote = "Hidden while requests are in flight.";
+      else if (s.in_flight.count > 0 || s.upstream_requests?.processing > 0 || s.upstream_requests?.deferred > 0 || p.queue_size > 0) unNote = "Hidden while requests or statistics are pending.";
       else if (u.visible) {
         un = `${fInt(u.prompt_tokens)} prompt / ${fInt(u.completion_tokens)} gen`;
         unNote = "Likely direct :8080 traffic. Other explanations: dropped or failed stats rows, cancelled requests, requests still in flight.";
       } else un = "none";
       body.innerHTML = kvRows([
-        ["prompt_tokens_total", fInt(c.prompt)],
+        ["prompt_tokens_total", fInt(c.prompt), s.prompt_counter_excludes_cached ? "prefill only; cached tokens excluded" : "includes cached tokens"],
         ["tokens_predicted_total", fInt(c.predicted)],
-        ["Last request prefill tok/s (Gufo)", fTps(s.gauges?.last_request_prefill_tps)],
-        ["Last request decode tok/s (Gufo)", fTps(s.gauges?.last_request_decode_tps)],
+        ["Gufo requests processing", fInt(s.upstream_requests?.processing)],
+        ["Gufo requests deferred", fInt(s.upstream_requests?.deferred), "Waiting for a Gufo session; not the proxy request queue"],
+        ["Last prefill tok/s (Gufo)", fTps(s.gauges?.last_request_prefill_tps)],
+        ["Last decode tok/s (Gufo)", fTps(s.gauges?.last_request_decode_tps)],
         ["Unattributed Gufo tokens", un, u.available ? `since ${fDateTime(u.baseline_ms)}` : ""],
         ["In flight", fInt(s.in_flight.count)],
         ["Baseline", u.available ? esc(fDateTime(u.baseline_ms)) : "waiting for idle"],

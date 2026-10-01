@@ -1,0 +1,9 @@
+[Unit]
+Description=Export Gufo cache capacity and observed eviction diagnostics
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/gufo-dashboard/cache-observer.env
+ExecStart=/usr/bin/python3 ${GUFO_CACHE_OBSERVER_SCRIPT} --container ${GUFO_CONTAINER} --output ${GUFO_CACHE_OUTPUT}
+TimeoutStartSec=20s
+UMask=0077

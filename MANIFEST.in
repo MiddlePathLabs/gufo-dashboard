@@ -1,8 +1,8 @@
-include CONTRIBUTING.md SECURITY.md requirements.txt uv.lock
+include CHANGELOG.md CONTRIBUTING.md SECURITY.md requirements.txt uv.lock
 include .env.example .gitignore .dockerignore Dockerfile docker-compose.yml
 recursive-include docs *.md
 recursive-include tests *.py *.json *.sse *.txt *.md
-recursive-include scripts *.py
+recursive-include scripts *.py *.service *.timer
 recursive-exclude * __pycache__ *.pyc
 
 # Exclude unreviewed local images, including entries in cached manifests.

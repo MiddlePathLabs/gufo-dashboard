@@ -592,9 +592,20 @@ def cache(conn: sqlite3.Connection, range_: str, model: str | None, now: int) ->
     }
 
 
-def unattributed_window(conn: sqlite3.Connection, start_ms: int, end_ms: int) -> dict[str, int]:
+def unattributed_window(
+    conn: sqlite3.Connection,
+    start_ms: int,
+    end_ms: int,
+    *,
+    prompt_excludes_cached: bool = False,
+) -> dict[str, int]:
+    prompt = (
+        "COALESCE(prefill_tokens, MAX(0, prompt_tokens - cached_tokens))"
+        if prompt_excludes_cached
+        else "prompt_tokens"
+    )
     row = conn.execute(
-        "SELECT SUM(prompt_tokens), SUM(completion_tokens), "
+        f"SELECT SUM({prompt}), SUM(completion_tokens), "
         "SUM(CASE WHEN finish_reason = 'client_cancelled' THEN 1 ELSE 0 END), COUNT(*) "
         "FROM request_stats WHERE completed_at_ms >= ? AND completed_at_ms <= ?",
         (start_ms, end_ms),

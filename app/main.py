@@ -94,6 +94,12 @@ class Dispatcher:
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 status["code"] = message["status"]
+                if path in ("/static/app.js", "/static/app.css"):
+                    message["headers"] = [
+                        (key, value)
+                        for key, value in message.get("headers", [])
+                        if key.lower() != b"cache-control"
+                    ] + [(b"cache-control", b"no-cache")]
             await send(message)
 
         target: ASGIApp

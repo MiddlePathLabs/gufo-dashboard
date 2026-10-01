@@ -19,7 +19,7 @@ import httpx
 
 from . import prom
 from .db import StatsWriter, now_ms
-from .extract import as_int, as_str, loads_strict
+from .extract import as_float, as_int, as_str, loads_strict
 
 log = logging.getLogger("gufo_dashboard.poller")
 
@@ -30,6 +30,7 @@ class Baseline:
     window_end: int
     prompt: float = 0.0
     predicted: float = 0.0
+    prompt_excludes_cached: bool = False
 
 
 class Poller:
@@ -57,6 +58,9 @@ class Poller:
         self.last_error: str | None = None
         self.counters: dict[str, float] | None = None  # last seen totals
         self.gauges: dict[str, float | None] = {"prompt": None, "predicted": None}
+        self.requests_processing: int | None = None
+        self.requests_deferred: int | None = None
+        self.prompt_excludes_cached = False
         self.baseline: Baseline | None = None
         self._last_snapshot: tuple[Any, ...] | None = None
         self._task: asyncio.Task[None] | None = None
@@ -143,7 +147,11 @@ class Poller:
 
         r = await self._get("/metrics")
         if r is not None and r.status_code == 200:
-            self._on_metrics(prom.parse_prometheus(r.text), now)
+            self._on_metrics(
+                prom.parse_prometheus(r.text),
+                now,
+                prompt_excludes_cached=prom.prompt_excludes_cached(r.text),
+            )
 
     def _set_online(self, online: bool, model: str | None, now: int) -> None:
         if online and self.online is not True:
@@ -155,6 +163,7 @@ class Poller:
             )
             self.ready_since_ms = None
             self.gauges = {"prompt": None, "predicted": None}
+            self.requests_processing = self.requests_deferred = None
         self.online = online
         if online and model:
             self._set_model(model)
@@ -164,12 +173,31 @@ class Poller:
             self.writer.submit_event("model_changed", model, as_str(self.model, 128))
         self.model = model
 
-    def _on_metrics(self, samples: dict[str, float], now: int) -> None:
-        cur_p = samples.get(prom.PROMPT_TOTAL)
-        cur_d = samples.get(prom.PREDICTED_TOTAL)
+    @property
+    def upstream_busy(self) -> bool:
+        return bool((self.requests_processing or 0) + (self.requests_deferred or 0))
+
+    def _on_metrics(
+        self,
+        samples: dict[str, float],
+        now: int,
+        *,
+        prompt_excludes_cached: bool | None = None,
+    ) -> None:
+        if (
+            prompt_excludes_cached is not None
+            and prompt_excludes_cached != self.prompt_excludes_cached
+        ):
+            # Never mix full-prompt and executed-prefill units across an upgrade.
+            self.reset_baseline()
+            self.prompt_excludes_cached = prompt_excludes_cached
+        self.requests_processing = as_int(samples.get(prom.REQUESTS_PROCESSING))
+        self.requests_deferred = as_int(samples.get(prom.REQUESTS_DEFERRED))
+        cur_p = as_float(samples.get(prom.PROMPT_TOTAL))
+        cur_d = as_float(samples.get(prom.PREDICTED_TOTAL))
         self.gauges = {
-            "prompt": samples.get(prom.PROMPT_RATE),
-            "predicted": samples.get(prom.PREDICTED_RATE),
+            "prompt": as_float(samples.get(prom.PROMPT_RATE)),
+            "predicted": as_float(samples.get(prom.PREDICTED_RATE)),
         }
         if cur_p is None or cur_d is None:
             return
@@ -186,8 +214,12 @@ class Poller:
         self.counters = {"prompt": cur_p, "predicted": cur_d}
 
         if self.baseline is None:
-            if self.inflight_count() == 0:
-                self.baseline = Baseline(ts=now, window_end=now)
+            if self.inflight_count() == 0 and not self.upstream_busy:
+                self.baseline = Baseline(
+                    ts=now,
+                    window_end=now,
+                    prompt_excludes_cached=self.prompt_excludes_cached,
+                )
         else:
             self.baseline.prompt += delta_p
             self.baseline.predicted += delta_d
@@ -211,6 +243,11 @@ class Poller:
             "last_poll_ms": self.last_poll_ms,
             "last_error": self.last_error,
             "counters": self.counters,
+            "prompt_counter_excludes_cached": self.prompt_excludes_cached,
+            "upstream_requests": {
+                "processing": self.requests_processing,
+                "deferred": self.requests_deferred,
+            },
             "gauges": {
                 "last_request_prefill_tps": self.gauges["prompt"],
                 "last_request_decode_tps": self.gauges["predicted"],

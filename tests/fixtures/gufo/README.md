@@ -50,3 +50,9 @@ Future captures require `--gufo-version VERSION` and optionally accept
 operator-supplied identity and a UTC capture timestamp. Preserve that file when
 publishing sanitized fixtures. The current samples predate this metadata;
 recapturing is required to establish their replacement's build provenance.
+
+## Gufo 0.4.0
+
+The [versioned captures](v0.4.0/README.md) add verified build provenance,
+prefill-only live counters, Completions terminal timings, and prompt-progress
+streams. The parent fixtures retain the older full-prompt counter behavior.

@@ -164,3 +164,37 @@ suppressed. New requests can add both metadata and text afterward.
 
 The API is part of the current `0.1.x` application and has no versioned stability
 contract. Response implementations live in `app/api.py` and `app/stats.py`.
+
+## Gufo 0.4.0 status fields
+
+`GET /api/status` adds `upstream_requests.processing` and
+`upstream_requests.deferred`. These are Gufo-wide admitted and queued request
+counts, including traffic that bypasses the proxy. Missing gauges and offline
+state return null. `in_flight` still counts only dashboard-proxied requests.
+
+`prompt_counter_excludes_cached` identifies the units of `counters.prompt`
+and the unattributed prompt estimate. It is true when Gufo’s metrics HELP line
+announces that cache hits are excluded. The dashboard then subtracts recorded
+prefill work rather than full prompt totals. `recorded_prompt_tokens` in the
+unattributed response uses those same units. Gufo 0.4.0’s token counters update
+during generation; its speed gauges retain the latest nonzero request rates.
+
+
+`capabilities.live_requests` reports whether both native request gauges were
+observed. Older servers return false and null request counts. Internally and in
+the API, `deferred` means requests waiting for a Gufo session; it is separate
+from the proxy’s in-flight count and statistics-writer queue.
+
+`cache_pressure` contains the optional host observer’s snapshot: `available`,
+`status`, `gufo_version` (runtime image version), `log_level`, capacity budgets,
+`snapshot_entry_limit`, observed eviction/skip counts, a bounded `events` list,
+and observation/window timestamps. `capabilities.cache_pressure` is true only
+for a fresh successful snapshot containing recognized RAM or disk diagnostics.
+A version string alone never enables a feature. Missing, stale, unknown, or
+unconfigured features are unavailable rather than zero. Event rows contain only
+`ts_ms`, `tier`, `action`, `reason`, and optional numeric `bytes`.
+
+`in_flight.items` adds `phase` (`waiting`, `prefill`, `generating`) and optional
+`prompt_progress` (`cache`, `processed`, `total`). Only validated numeric progress
+from proxied SSE streams is exposed. Progress is absent after the first generated
+token and disappears with the completed request.

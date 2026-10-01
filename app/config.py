@@ -42,6 +42,7 @@ def _float_env(name: str, default: float | None) -> float | None:
 class Settings:
     gufo_base_url: str = "http://127.0.0.1:8080"
     gufo_api_key: str = ""
+    gufo_cache_state_path: str = ""
     database_path: str = "./data/gufo-dashboard.sqlite"
     dashboard_host: str = "0.0.0.0"
     dashboard_port: int = 8081
@@ -94,6 +95,7 @@ class Settings:
         return cls(
             gufo_base_url=env.get("GUFO_BASE_URL", cls.gufo_base_url).rstrip("/"),
             gufo_api_key=env.get("GUFO_API_KEY", ""),
+            gufo_cache_state_path=env.get("GUFO_CACHE_STATE_PATH", ""),
             database_path=env.get("DATABASE_PATH", cls.database_path),
             dashboard_host=env.get("DASHBOARD_HOST", cls.dashboard_host),
             dashboard_port=_int_env("DASHBOARD_PORT", cls.dashboard_port),

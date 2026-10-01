@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from . import stats
+from .cache_pressure import read_cache_pressure
 from .db import connect, now_ms
 from .poller import compute_unattributed
 from .version import dashboard_version
@@ -61,12 +62,23 @@ def status(request: Request) -> dict[str, Any]:
     if poller.baseline is not None:
         with _read(request) as conn:
             recorded = stats.unattributed_window(
-                conn, poller.baseline.ts, poller.baseline.window_end
+                conn,
+                poller.baseline.ts,
+                poller.baseline.window_end,
+                prompt_excludes_cached=poller.baseline.prompt_excludes_cached,
             )
     writer = ctx.writer
+    pressure = read_cache_pressure(ctx.settings.gufo_cache_state_path, now)
     return {
         "version": dashboard_version(),
         **poller.status(),
+        "cache_pressure": pressure,
+        "capabilities": {
+            "live_requests": poller.requests_processing is not None
+            and poller.requests_deferred is not None,
+            "cache_pressure": pressure["available"]
+            and (pressure.get("ram_configured") or pressure.get("disk_configured")),
+        },
         "in_flight": {
             "count": len(inflight),
             "per_model": per_model,
@@ -77,6 +89,8 @@ def status(request: Request) -> dict[str, Any]:
                     "is_streaming": f.is_streaming,
                     "started_at_ms": f.started_at_ms,
                     "elapsed_ms": now - f.started_at_ms,
+                    "phase": f.phase,
+                    "prompt_progress": f.prompt_progress,
                 }
                 for f in sorted(inflight, key=lambda f: f.started_at_ms)
             ],
@@ -84,7 +98,7 @@ def status(request: Request) -> dict[str, Any]:
         "unattributed": compute_unattributed(
             poller.baseline,
             recorded,
-            len(inflight) + writer.queue.qsize(),
+            len(inflight) + writer.queue.qsize() + int(poller.upstream_busy),
             ctx.settings.unattributed_threshold,
         ),
         "pipeline": {

@@ -1,0 +1,38 @@
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":",","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" I","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"'m","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" currently","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" a","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" final","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"-year","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" student","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" studying","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" Computer","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" Science","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" in","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" India","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" and","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" I","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"'m","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":"length"}],"timings":{"prompt_n":1,"prompt_ms":67.03088,"prompt_per_token_ms":67.03088,"prompt_per_second":14.918497265737821,"predicted_n":16,"predicted_ms":458.284602,"predicted_per_token_ms":28.642787625,"predicted_per_second":34.912802939863994,"cache_n":0,"cache_restore_ms":0,"cache_snapshot_ms":11.743243,"cache_disk_enqueue_ms":0,"draft_n":10,"draft_n_accepted":7}}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":16,"total_tokens":17,"prompt_tokens_details":{"cached_tokens":0},"cached_tokens":0,"prompt_tokens_per_second":14.918497265737821,"completion_tokens_per_second":34.912802939863994,"draft_tokens":10,"draft_tokens_accepted":7}}
+
+data: [DONE]
+

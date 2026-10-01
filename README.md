@@ -18,6 +18,8 @@ identifiers are anonymized; these figures illustrate the interface, not a benchm
   with separate retention and deletion controls.
 - Keeps throughput, time to first token, cache hits, and draft acceptance separate
   for each model.
+- Optionally shows snapshot-cache budgets and observed eviction events through
+  a [host cache observer](docs/deployment.md#cache-pressure-observer).
 - Stores statistics in SQLite with configurable retention and daily rollups.
 - Runs with Python or Docker. The frontend uses plain HTML, CSS, JavaScript, and
   a bundled copy of Chart.js; there is no frontend build step or CDN dependency.

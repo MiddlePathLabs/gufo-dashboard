@@ -227,3 +227,63 @@ Clear stats is available in the dashboard's Gufo counters panel. It removes the
 recorded history, including daily rollups and captured text. The toolbar’s
 Clear captured content button deletes questions and answers while keeping metrics. Read the [privacy reference](privacy.md)
 for deletion limits.
+
+
+## Cache pressure observer
+
+This optional Linux/Docker feature reads structured Gufo 0.4.0 cache logs on the
+host and writes a small numeric snapshot for the Cache panel. It does not mount
+the Docker socket or raw logs into the dashboard. Existing HTTP metrics need no
+log access. Choose the same Gufo instance that `GUFO_BASE_URL` points to.
+
+From the source checkout, test a single snapshot:
+
+```bash
+python3 scripts/observe_gufo_cache.py --container gufo --output data/gufo-cache-state.json
+```
+
+The host user must already have access to Docker. The script uses only Python’s
+standard library. Set `GUFO_CACHE_STATE_PATH=/data/gufo-cache-state.json` in `.env`
+for Compose, or use the absolute host snapshot path for Python runs. The existing
+`data` bind mount exposes the snapshot. The dashboard UID must match the host
+observer’s UID because snapshots have owner-only permissions.
+
+For continued updates, install the included user service and timer:
+
+```bash
+mkdir -p ~/.config/systemd/user ~/.config/gufo-dashboard
+cp scripts/systemd/gufo-cache-observer.service scripts/systemd/gufo-cache-observer.timer ~/.config/systemd/user/
+```
+
+Create `~/.config/gufo-dashboard/cache-observer.env` with absolute paths:
+
+```dotenv
+GUFO_CACHE_OBSERVER_SCRIPT=/absolute/checkout/scripts/observe_gufo_cache.py
+GUFO_CONTAINER=gufo
+GUFO_CACHE_OUTPUT=/absolute/checkout/data/gufo-cache-state.json
+```
+
+Enable the timer and recreate the dashboard after changing `.env`:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now gufo-cache-observer.timer
+docker compose up -d --build
+```
+
+The timer refreshes every 10 seconds while the user manager runs. User-manager
+lifetime depends on the machine’s existing login/linger configuration. Check
+`systemctl --user status gufo-cache-observer.timer`; disable the feature with
+`systemctl --user disable --now gufo-cache-observer.timer` and clear the path
+setting. Observations become unavailable after 30 seconds without a successful
+refresh, or when the container is stopped. Log replay is bounded to the last
+20,000 lines per tick; counts cover that retained window and reset with a new
+container. They are not all-time eviction counters.
+
+Keep Gufo’s default `info` level (or `debug`) for capacity startup lines and disk
+LRU events. `warn` hides those INFO diagnostics; `error` also hides RAM eviction
+warnings. Even at `debug`, routine RAM byte-limit removals and live occupied
+snapshot slots are not reported. The Cache panel labels RAM entry-limit events,
+capacity limits, and missing values accordingly. Disk values remain unavailable
+if disk caching is not configured or its diagnostics are missing. No Gufo restart
+or log-level change is required on a server already using `info`.
