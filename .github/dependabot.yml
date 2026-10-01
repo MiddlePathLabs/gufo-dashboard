@@ -9,6 +9,9 @@ updates:
         patterns: ["*"]
   - package-ecosystem: uv
     directory: /
+    # Generated from uv.lock; update the manifest/lockfile, then regenerate this export.
+    exclude-paths:
+      - requirements.txt
     schedule:
       interval: weekly
     groups:

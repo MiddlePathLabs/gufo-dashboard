@@ -66,7 +66,8 @@ uv sync --locked --extra dev
 ```
 
 Weekly Dependabot PRs update GitHub Actions and the `uv` dependency manifest and
-lockfile, including the development audit tool. Regenerate `requirements.txt`
+lockfile, including the development audit tool. Dependabot excludes the generated
+`requirements.txt` export to avoid independent, incompatible pins. Regenerate it
 with the command above on Python dependency PRs before merging; CI rejects a
 stale export. GitHub Actions remain pinned to release commit SHAs.
 
