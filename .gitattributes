@@ -1,2 +1,2 @@
 # SSE fixtures require a blank line to terminate the final event.
-tests/fixtures/gufo/*.sse whitespace=-blank-at-eof
+tests/fixtures/gufo/**/*.sse whitespace=-blank-at-eof

@@ -1,0 +1,42 @@
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":null}],"prompt_progress":{"total":4,"cache":0,"processed":0,"time_ms":0}}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":null}],"prompt_progress":{"total":4,"cache":0,"processed":4,"time_ms":83}}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"\n\n","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"<think>","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"\n","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"The","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" user","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" wants","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" me","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" to","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" count","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" to","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" three","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":".","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" Simple","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" request","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":".","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"\n","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":"length"}],"timings":{"prompt_n":4,"prompt_ms":83.688572,"prompt_per_token_ms":20.922143,"prompt_per_second":47.79625108192789,"predicted_n":16,"predicted_ms":642.4383140000001,"predicted_per_token_ms":40.15239462500001,"predicted_per_second":24.90511485901197,"cache_n":0,"cache_restore_ms":0,"cache_snapshot_ms":13.726405,"cache_disk_enqueue_ms":0,"draft_n":15,"draft_n_accepted":9}}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[],"usage":{"prompt_tokens":4,"completion_tokens":16,"total_tokens":20,"prompt_tokens_details":{"cached_tokens":0},"cached_tokens":0,"prompt_tokens_per_second":47.79625108192789,"completion_tokens_per_second":24.90511485901197,"draft_tokens":15,"draft_tokens_accepted":9}}
+
+data: [DONE]
+

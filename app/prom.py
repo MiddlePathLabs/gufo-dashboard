@@ -31,7 +31,7 @@ def parse_prometheus(text: str) -> dict[str, float]:
             value = float(m.group("value"))
         except ValueError:
             continue
-        if math.isnan(value):
+        if not math.isfinite(value):
             continue
         key = m.group("name") + (m.group("labels") or "")
         out[key] = value
@@ -42,3 +42,14 @@ PROMPT_TOTAL = "llamacpp:prompt_tokens_total"
 PREDICTED_TOTAL = "llamacpp:tokens_predicted_total"
 PROMPT_RATE = "llamacpp:prompt_tokens_seconds"
 PREDICTED_RATE = "llamacpp:predicted_tokens_seconds"
+
+REQUESTS_PROCESSING = "llamacpp:requests_processing"
+REQUESTS_DEFERRED = "llamacpp:requests_deferred"
+
+
+def prompt_excludes_cached(text: str) -> bool:
+    """Gufo 0.4 announces its new counter units in the HELP line."""
+    return any(
+        line.startswith(f"# HELP {PROMPT_TOTAL} ") and "excluding cache hits" in line
+        for line in text.splitlines()
+    )

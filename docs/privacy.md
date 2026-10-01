@@ -102,3 +102,16 @@ its backups private. Deletion is logical, not secure erasure of SQLite pages,
 WAL files, disk blocks, backups, or snapshots. Screenshots and copied text also
 create independent copies. No account system or compliance workflow is needed
 for a single-user homelab, but other users should know when capture is enabled.
+
+
+## Optional cache observer
+
+The host cache observer reads a bounded window of Docker logs transiently. It
+writes no raw log text, prompts, answers, client addresses, credentials, request
+IDs, or filesystem paths to the snapshot. The saved JSON contains capacity
+numbers, fixed cache event types/reasons, timestamps, the runtime image version,
+and effective log-level metadata. The dashboard reads this optional local file;
+it has no Docker socket or Docker permissions. The snapshot is replaced atomically
+with owner-only permissions. Its bounded event window is independent of request
+history and Clear stats; remove the snapshot and stop the observer to delete it.
+Transient prefill progress contains numeric token counts only and is not persisted.

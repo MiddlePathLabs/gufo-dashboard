@@ -72,6 +72,8 @@ class InFlight:
     model: str | None
     is_streaming: bool
     started_at_ms: int
+    phase: str = "waiting"
+    prompt_progress: dict[str, int] | None = None
 
 
 class InFlightTracker:
@@ -83,6 +85,15 @@ class InFlightTracker:
         key = next(self._ids)
         self._items[key] = item
         return key
+
+    def update_progress(self, key: int, inspector: extract.StreamInspector) -> None:
+        item = self._items.get(key)
+        if item is not None:
+            item.prompt_progress = inspector.prompt_progress
+            if inspector.first_token_seen:
+                item.phase = "generating"
+            elif inspector.prompt_progress is not None:
+                item.phase = "prefill"
 
     def remove(self, key: int) -> None:
         self._items.pop(key, None)
@@ -452,6 +463,8 @@ class _Exchange:
             self.proxy._extraction_error(exc)
             self.inspector = None
             return False
+        if self.flight_key is not None:
+            self.proxy.inflight.update_progress(self.flight_key, inspector)
         if first and self.first_token is None:
             self.first_token = (time.monotonic() - self.t0) * 1000.0
         return drop

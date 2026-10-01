@@ -386,6 +386,7 @@ class StreamInspector:
         self.strip = strip_usage_event
         self.dropped = False
         self.first_token_seen = False
+        self.prompt_progress: dict[str, int] | None = None
         self.fields: dict[str, Any] = {}
 
     def on_data(self, data: str) -> tuple[bool, bool]:
@@ -399,6 +400,18 @@ class StreamInspector:
         if not isinstance(obj, dict):
             return False, False
         drop = first = False
+        if not self.first_token_seen and self.kind in ("chat", "completions", "responses"):
+            progress = _dict(obj.get("prompt_progress"))
+            total = as_int(progress.get("total"))
+            cached = as_int(progress.get("cache"))
+            processed = as_int(progress.get("processed"))
+            if (
+                total is not None
+                and cached is not None
+                and processed is not None
+                and cached <= processed <= total
+            ):
+                self.prompt_progress = {"total": total, "cache": cached, "processed": processed}
         if self.kind in ("chat", "completions"):
             if not self.first_token_seen and self._chat_has_token(obj):
                 first = True
@@ -421,6 +434,7 @@ class StreamInspector:
                 self.fields["error_code"] = code
         if first:
             self.first_token_seen = True
+            self.prompt_progress = None
         return drop, first
 
     def _chat_has_token(self, obj: dict[str, Any]) -> bool:

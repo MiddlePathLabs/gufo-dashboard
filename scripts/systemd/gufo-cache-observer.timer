@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Gufo cache diagnostics
+
+[Timer]
+OnStartupSec=2s
+OnUnitInactiveSec=10s
+AccuracySec=1s
+Unit=gufo-cache-observer.service
+
+[Install]
+WantedBy=timers.target
