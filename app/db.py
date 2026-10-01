@@ -167,14 +167,54 @@ def init_db(path: str) -> None:
     os.makedirs(parent, exist_ok=True)
     conn = connect(path)
     try:
+        tables = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            if not row[0].startswith("sqlite_")
+        }
+        version = None
+        if tables:
+            if "schema_version" not in tables:
+                raise RuntimeError(
+                    "Database has no schema version. Back it up and use a compatible "
+                    "dashboard release or a new DATABASE_PATH."
+                )
+            versions = conn.execute("SELECT version FROM schema_version").fetchall()
+            if len(versions) != 1 or versions[0][0] not in (1, SCHEMA_VERSION):
+                found = [row[0] for row in versions]
+                raise RuntimeError(
+                    f"Unsupported database schema version {found}; this release supports "
+                    f"1 and {SCHEMA_VERSION}. Back up the database and use a compatible "
+                    "dashboard release or a new DATABASE_PATH."
+                )
+            version = versions[0][0]
+            # Version 1 differs only by the absence of request_content.
+            with contextlib.closing(sqlite3.connect(":memory:")) as expected:
+                expected.executescript(_schema())
+                for table in (
+                    "request_stats",
+                    "events",
+                    "metrics_snapshots",
+                    "daily_rollup",
+                    *(
+                        ()
+                        if version == 1 and "request_content" not in tables
+                        else ("request_content",)
+                    ),
+                ):
+                    required = {row[1] for row in expected.execute(f"PRAGMA table_info({table})")}
+                    actual = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                    if missing := required - actual:
+                        raise RuntimeError(
+                            f"Incompatible database schema: {table} is missing "
+                            f"{', '.join(sorted(missing))}. Back up the database and use a "
+                            "compatible dashboard release or a new DATABASE_PATH."
+                        )
         conn.executescript(_schema())
-        row = conn.execute("SELECT version FROM schema_version").fetchone()
-        if row is None:
+        if version is None:
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
-        conn.execute(
-            "UPDATE schema_version SET version = ? WHERE version < ?",
-            (SCHEMA_VERSION, SCHEMA_VERSION),
-        )
+        elif version == 1:
+            conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         conn.commit()
     finally:
         conn.close()

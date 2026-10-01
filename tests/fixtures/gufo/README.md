@@ -43,3 +43,10 @@ Cache state, timings, and counter totals vary between captures. Update these
 notes and the tests' expected deltas when recapturing. No Gufo commit identifier
 was recorded for the current samples, so compatibility claims are limited to
 this captured behavior.
+
+
+Future captures require `--gufo-version VERSION` and optionally accept
+`--gufo-commit COMMIT`. The script writes `gufo_build.json` with this
+operator-supplied identity and a UTC capture timestamp. Preserve that file when
+publishing sanitized fixtures. The current samples predate this metadata;
+recapturing is required to establish their replacement's build provenance.

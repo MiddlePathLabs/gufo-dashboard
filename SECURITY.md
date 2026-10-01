@@ -13,6 +13,13 @@ restrict the published port's host address. If remote access is needed, place an
 authenticated TLS gateway in front of the whole service, including `/api/*` and
 proxied routes, and restrict direct access to Gufo as well.
 
+DNS rebinding can let a malicious website use a household browser to reach a
+local service; binding to `127.0.0.1` alone does not prevent that class of attack.
+Browser local-network protections mitigate it. The dashboard also rejects named
+Host headers unless explicitly listed in `DASHBOARD_ALLOWED_HOSTS`; IP literals
+remain accepted. List only trusted hostnames, including any authenticated gateway.
+This check does not provide authentication or restrict direct network access.
+
 Client credentials are forwarded to Gufo. `GUFO_API_KEY` is used only for status
 polls; it is not a dashboard password. Database records contain identifiers,
 usage metadata, and optionally captured questions and answers. Anyone who can

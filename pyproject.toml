@@ -15,12 +15,14 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/MiddlePathLabs/gufo-dashboard"
 Issues = "https://github.com/MiddlePathLabs/gufo-dashboard/issues"
+Security = "https://github.com/MiddlePathLabs/gufo-dashboard/security/policy"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
     "ruff>=0.5",
     "mypy>=1.10",
+    "pip-audit==2.10.1",
 ]
 
 [build-system]

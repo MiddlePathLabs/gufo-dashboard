@@ -816,7 +816,8 @@
       state.status = await api("/api/status");
       renderStatus(state.status);
       const capture = state.status.content_capture;
-      $("capture-status").textContent = capture?.enabled ? `Text capture on · ${capture.retention_days}d retention` : "Text capture off";
+      $("capture-status").className = capture?.enabled ? "capture-on" : "muted";
+      $("capture-status").textContent = capture?.enabled ? `● CONTENT CAPTURE ON · ${capture.retention_days}d` : "Text capture off";
     } catch {
       $("status-dot").className = "dot dot-unknown";
       $("status-text").textContent = "dashboard unreachable";

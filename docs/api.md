@@ -10,7 +10,7 @@ Interactive OpenAPI pages are disabled.
 | Method | Path | Parameters and result |
 | --- | --- | --- |
 | GET | `/api/health` | `{"status":"ok"}`; dashboard liveness only |
-| GET | `/api/status` | Upstream online state, model, observed ready duration, gauges, in-flight requests, pipeline counters, content-capture settings, and unattributed-token estimate |
+| GET | `/api/status` | Dashboard package `version`, upstream online state, model, observed ready duration, gauges, in-flight requests, pipeline counters, content-capture settings, and unattributed-token estimate |
 | GET | `/api/models` | `models` array and `current` model |
 | GET | `/api/summary` | `range`, `model`; counts and per-model metrics |
 | GET | `/api/timeseries` | `range`, `model`, `bucket`; timestamps, totals, and per-model series |
@@ -36,6 +36,9 @@ Interactive OpenAPI pages are disabled.
   `partial`. `content` selects requests with retained question or answer text;
   `partial` selects those with partial or truncated text. Neither includes text
   previews. Filters apply to request rows; lifecycle events remain in the feed.
+
+`/api/status` reports the installed package version. Source-only runs without
+package metadata report `unknown (source checkout)`.
 
 Times are UTC Unix epoch milliseconds. Rates use tokens per second. Ratios such
 as cache hit rate and draft acceptance are fractions, not percentage strings.

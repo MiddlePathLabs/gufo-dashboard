@@ -19,7 +19,7 @@ Private vulnerability reporting is enabled. See the [security policy](../SECURIT
 
 ## Validation
 
-- The current suite passes 121 tests, including optional content capture,
+- The current suite passes 173 tests, including optional content capture,
   forwarding, privacy, retention, and deletion behavior.
 - Ruff lint and formatting, mypy, Python distribution builds, and Docker builds
   pass. Runtime dependency auditing reports no known vulnerabilities at review
@@ -51,8 +51,8 @@ upstream commit. Test updates against the upstream release you intend to use.
 1. Review `git diff --cached` before committing. Ignore rules do not remove
    already-tracked files and do not protect manual folder or archive uploads.
 2. Confirm CI succeeds on the published commit before treating it as a release.
-3. Protect the default branch once it exists remotely, using the desired review
-   and required-check policy.
+3. Keep `main` protected: require the Python 3.12, 3.13, and 3.14 checks and
+   the Docker build and health check before merging. Use squash merges.
 4. Review dependency updates and regenerate both `uv.lock` and `requirements.txt`.
 5. Scan imported Git history before publishing it, and rotate any exposed secrets.
 
