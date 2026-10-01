@@ -672,13 +672,17 @@
   $("clear-content").addEventListener("click", () => $("content-clear-dialog").showModal());
   $("content-clear-dialog").addEventListener("close", async () => {
     if ($("content-clear-dialog").returnValue !== "clear") return;
+    $("content-clear-status").hidden = true;
     try {
       const result = await fetch("/api/content/clear", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: "clear" }) });
       if (!result.ok) throw new Error();
       $("content-body").replaceChildren();
       if (state.selectedId !== null && !$("content-body").hidden) await loadContent(state.selectedId);
       resetFeed();
-    } catch { $("capture-status").textContent = "Content clear failed. Try again."; }
+    } catch {
+      $("content-clear-status").textContent = "Content clear failed. Try again.";
+      $("content-clear-status").hidden = false;
+    }
   });
   function timelineHtml(r) {
     const q = r.queue_ms, p = r.prefill_ms, d = r.decode_ms;
