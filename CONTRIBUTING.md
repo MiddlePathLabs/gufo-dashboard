@@ -27,7 +27,7 @@ uv run --locked mypy app
 uv build
 ```
 
-Run these before opening a pull request. CI checks Python 3.12 and 3.13 and builds
+Run these before opening a pull request. CI checks Python 3.12, 3.13, and 3.14 and builds
 the Docker image. There is no JavaScript build pipeline; inspect frontend changes
 in a browser at desktop and narrow widths, including keyboard navigation.
 
@@ -65,6 +65,11 @@ uv export --locked --no-dev --no-emit-project --format requirements-txt --output
 uv sync --locked --extra dev
 ```
 
+Weekly Dependabot PRs update GitHub Actions and the `uv` dependency manifest and
+lockfile, including the development audit tool. Regenerate `requirements.txt`
+with the command above on Python dependency PRs before merging; CI rejects a
+stale export. GitHub Actions remain pinned to release commit SHAs.
+
 For a deliberate full dependency upgrade, use `uv lock --upgrade`, regenerate
 the export, and run the checks. Do not edit generated pins or hashes by hand.
 
@@ -77,8 +82,13 @@ See the [fixture reference](tests/fixtures/gufo/README.md).
 To capture against a local test server:
 
 ```bash
-GUFO_BASE_URL=http://127.0.0.1:8080 uv run --locked python scripts/capture_fixtures.py
+GUFO_BASE_URL=http://127.0.0.1:8080 uv run --locked python scripts/capture_fixtures.py \
+  --gufo-version YOUR_GUFO_VERSION --gufo-commit YOUR_GUFO_COMMIT
 ```
+
+`--gufo-version` is required; `--gufo-commit` is optional. The script saves both
+with a UTC capture timestamp in `gufo_build.json`. Supply the build identity from
+the server or its source checkout; it cannot be inferred from model names.
 
 This sends 15 inference requests, including deliberately invalid requests, and
 overwrites the fixture files. It requires an upstream that permits these requests

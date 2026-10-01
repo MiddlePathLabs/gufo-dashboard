@@ -9,8 +9,10 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import uvicorn
@@ -56,12 +58,34 @@ class Dispatcher:
     duration and Gufo request ID. Never bodies, headers, query strings or IPs.
     """
 
-    def __init__(self, dashboard: FastAPI) -> None:
+    def __init__(self, dashboard: FastAPI, allowed_hosts: tuple[str, ...] = ("localhost",)) -> None:
         self.dashboard = dashboard
+        self.allowed_hosts = {host.lower().rstrip(".") for host in allowed_hosts}
+
+    def valid_host(self, scope: Scope) -> bool:
+        hosts = [value.decode("latin-1") for key, value in scope["headers"] if key == b"host"]
+        if len(hosts) != 1 or any(c in hosts[0] for c in "/?#@ \t\r\n"):
+            return False
+        try:
+            url = urlsplit("//" + hosts[0])
+            host = (url.hostname or "").lower().rstrip(".")
+            if url.port is not None and not 1 <= url.port <= 65535:
+                return False
+            if host in self.allowed_hosts:
+                return True
+            ip_address(host)
+            return True
+        except ValueError:
+            return False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.dashboard(scope, receive, send)
+            return
+        if not self.valid_host(scope):
+            await JSONResponse({"detail": "invalid Host header"}, status_code=400)(
+                scope, receive, send
+            )
             return
         path: str = scope["path"]
         t0 = time.monotonic()
@@ -215,7 +239,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
         return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    return Dispatcher(app)
+    return Dispatcher(app, settings.dashboard_allowed_hosts)
 
 
 def main() -> None:

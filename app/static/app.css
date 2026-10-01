@@ -37,6 +37,7 @@ body {
 .num, .value, td.num, .feed-row { font-variant-numeric: tabular-nums; }
 .mono, code { font-family: var(--mono); font-size: 12px; }
 .muted { color: var(--muted); }
+.capture-on { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid var(--warn); border-radius: 999px; background: #33280e; color: #ffd580; font-size: var(--fs-small); font-weight: 700; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 button { font: inherit; color: inherit; }
 [hidden] { display: none !important; }

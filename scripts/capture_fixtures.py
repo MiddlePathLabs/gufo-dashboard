@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import os
@@ -9,6 +10,7 @@ import struct
 import urllib.error
 import urllib.request
 import zlib
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +67,10 @@ def capture(base: str, image: str, name: str, method: str, path: str, body: Any 
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--gufo-version", required=True, help="Upstream version or build label")
+    parser.add_argument("--gufo-commit", help="Upstream source commit, if known")
+    args = parser.parse_args()
     base = os.environ.get("GUFO_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
     with urllib.request.urlopen(base + "/ready", timeout=180) as response:
         model = json.load(response)["model"]
@@ -75,6 +81,18 @@ def main() -> None:
     responses = {"model": model, "input": "Say hi", "max_output_tokens": 16}
     native = {"prompt": "Hello", "n_predict": 16}
     OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "gufo_build.json").write_text(
+        json.dumps(
+            {
+                "gufo_version": args.gufo_version,
+                "gufo_commit": args.gufo_commit,
+                "captured_at": datetime.now(UTC).isoformat(),
+                "source": "operator-supplied",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
     def req(name: str, method: str, path: str, body: Any = None) -> None:
         capture(base, image, name, method, path, body)

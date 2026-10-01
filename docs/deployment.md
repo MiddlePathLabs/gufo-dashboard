@@ -49,6 +49,11 @@ services:
     volumes:
       - ./data:/data
     restart: unless-stopped
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 ```
 
 ```bash
@@ -83,7 +88,7 @@ DASHBOARD_HOST=127.0.0.1 .venv/bin/python -m app.main
 
 `requirements.txt` pins runtime dependencies and includes their hashes. It is
 exported from `uv.lock`; dependency updates must regenerate both files. Python
-must be 3.12 or later. CI exercises 3.12 and 3.13.
+must be 3.12 or later. CI exercises 3.12, 3.13, and 3.14.
 
 ## Environment variables
 
@@ -93,7 +98,8 @@ must be 3.12 or later. CI exercises 3.12 and 3.13.
 | `GUFO_API_KEY` | Empty | Bearer token for the dashboard's own status polls only |
 | `DATABASE_PATH` | `./data/gufo-dashboard.sqlite` | SQLite path; Docker sets `/data/gufo-dashboard.sqlite` |
 | `DASHBOARD_HOST` | `0.0.0.0` | Listen address; use `127.0.0.1` for local-only host-network or Python runs |
-| `DASHBOARD_PORT` | `8081` | Listen port |
+| `DASHBOARD_PORT` | `8081` | Listen port, 1–65535 |
+| `DASHBOARD_ALLOWED_HOSTS` | `localhost` | Comma-separated exact hostnames accepted in requests; IP literals are always accepted |
 | `CAPTURE_CONTENT` | `false` | Opt-in latest-user/visible-answer text capture; restart to change |
 | `CONTENT_RETENTION_DAYS` | `7` | Positive text retention window, independent of metrics |
 | `CONTENT_MAX_BYTES` | `65536` | UTF-8 bytes per captured side; 1 to 1048576 |
@@ -105,13 +111,28 @@ must be 3.12 or later. CI exercises 3.12 and 3.13.
 | `SHUTDOWN_DRAIN_TIMEOUT` | `5` | Seconds allowed to drain queued writes |
 | `UNATTRIBUTED_THRESHOLD` | `64` | Show estimated unattributed tokens only above this threshold |
 
-Use positive ports, timeouts, retention, polling intervals, and queue sizes.
-Content retention must be at least one day; the content byte limit must be
-between 1 and 1048576, inclusive. Other settings currently have no range
-validation. `enable_poller` and the body inspection limit are programmatic `Settings` options, not environment variables.
+Ports must be 1–65535. Timeouts, retention, polling intervals, and queue sizes
+must be positive; timeouts and polling intervals must also be finite.
+`UNATTRIBUTED_THRESHOLD` may be zero but cannot be negative. The content byte
+limit must be between 1 and 1048576, inclusive. Invalid settings stop startup
+with an error naming the variable. `enable_poller` and the body inspection limit are programmatic `Settings` options, not environment variables.
 
 `GUFO_API_KEY` does not authenticate dashboard users and is not injected into
 proxied requests. Each client must send whatever credentials Gufo requires.
+
+## Named hosts and log rotation
+
+Direct IP URLs and `localhost` work by default. If you access the service through
+`http://gufo.home:8081`, set `DASHBOARD_ALLOWED_HOSTS=localhost,gufo.home`.
+For an authenticated gateway, include its hostname too. Entries are exact
+hostnames without schemes, ports, paths, or wildcards. Unlisted named hosts
+receive HTTP 400 on both dashboard and proxy routes. This reduces DNS rebinding
+exposure; it does not authenticate callers.
+
+The supplied Compose service uses Docker's `local` logging driver with three
+10 MB files per container. Recreate the container after changing logging options.
+Apply the same logging block to custom Compose deployments, including the bridge
+example above, if you want the same limits.
 
 ## Text capture configuration
 
@@ -154,7 +175,7 @@ The retention value is a positive integer in days; the size limit is an integer
 from 1 to 1048576 bytes per side. Defaults are seven days and 64 KiB. Limits
 truncate the saved copy, not the response delivered to the client.
 
-Check the toolbar for **Text capture on** or inspect `/api/status`:
+Check the toolbar for the amber **CONTENT CAPTURE ON** pill or inspect `/api/status`:
 
 ```bash
 curl http://localhost:8081/api/status
@@ -182,7 +203,10 @@ Before upgrading, make a backup, review dependency and schema changes, then
 rebuild the image or sync the locked Python environment. Run one application
 process per database. On startup, schema version 2 adds the content table to
 version-1 databases while preserving existing statistics. No previous transcript
-text is reconstructed. The schema has no general migration framework.
+text is reconstructed. Startup rejects unsupported schema versions or missing
+required columns before changing the schema. Back up the database and use a
+compatible release or a new `DATABASE_PATH` if this check fails. Do not edit the
+version marker to bypass it. The schema has no general migration framework.
 
 ## Troubleshooting
 

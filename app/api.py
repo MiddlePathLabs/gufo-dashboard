@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from . import stats
 from .db import connect, now_ms
 from .poller import compute_unattributed
+from .version import dashboard_version
 
 if TYPE_CHECKING:
     from .main import AppContext
@@ -64,6 +65,7 @@ def status(request: Request) -> dict[str, Any]:
             )
     writer = ctx.writer
     return {
+        "version": dashboard_version(),
         **poller.status(),
         "in_flight": {
             "count": len(inflight),
@@ -123,9 +125,11 @@ def summary(request: Request, range: str = RangeQ, model: str | None = ModelQ) -
 def timeseries(
     request: Request,
     range: str = RangeQ,
-    bucket: str = Query("auto", pattern=r"^(auto|\d{4,12})$"),
+    bucket: str = Query("auto", pattern=r"^(auto|[0-9]{4,12})$"),
     model: str | None = ModelQ,
 ) -> dict[str, Any]:
+    if bucket != "auto" and int(bucket) < 1000:
+        raise HTTPException(422, "bucket must be at least 1000 milliseconds")
     with _read(request) as conn:
         return stats.timeseries(conn, range, _model(model), now_ms(), bucket)
 

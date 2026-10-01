@@ -2,14 +2,40 @@
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
+from typing import overload
 
 
-def _float_or_none(value: str | None) -> float | None:
-    if value is None or not value.strip():
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        raise ValueError(f"{name} must be an integer") from None
+
+
+@overload
+def _float_env(name: str, default: float) -> float: ...
+
+
+@overload
+def _float_env(name: str, default: None) -> float | None: ...
+
+
+def _float_env(name: str, default: float | None) -> float | None:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    if not value.strip() and default is None:
         return None
-    return float(value)
+    try:
+        result = float(value)
+    except ValueError:
+        raise ValueError(f"{name} must be a number") from None
+    if not math.isfinite(result):
+        raise ValueError(f"{name} must be finite")
+    return result
 
 
 @dataclass(frozen=True)
@@ -19,6 +45,7 @@ class Settings:
     database_path: str = "./data/gufo-dashboard.sqlite"
     dashboard_host: str = "0.0.0.0"
     dashboard_port: int = 8081
+    dashboard_allowed_hosts: tuple[str, ...] = ("localhost",)
     capture_content: bool = False
     content_retention_days: int = 7
     content_max_bytes: int = 64 * 1024
@@ -33,10 +60,33 @@ class Settings:
     enable_poller: bool = True
 
     def __post_init__(self) -> None:
-        if self.content_retention_days < 1 or not 1 <= self.content_max_bytes <= 1024 * 1024:
-            raise ValueError(
-                "content retention must be positive; content limit must be 1-1048576 bytes"
-            )
+        if not 1 <= self.dashboard_port <= 65535:
+            raise ValueError("DASHBOARD_PORT must be between 1 and 65535")
+        for name, value in (
+            ("RETENTION_DAYS", self.retention_days),
+            ("CONTENT_RETENTION_DAYS", self.content_retention_days),
+            ("STATS_QUEUE_SIZE", self.stats_queue_size),
+            ("MAX_INSPECT_BODY_BYTES", self.max_inspect_body_bytes),
+        ):
+            if value < 1:
+                raise ValueError(f"{name} must be positive")
+        if not 1 <= self.content_max_bytes <= 1024 * 1024:
+            raise ValueError("CONTENT_MAX_BYTES must be between 1 and 1048576")
+        for name, seconds in (
+            ("POLL_INTERVAL_SECONDS", self.poll_interval_seconds),
+            ("UPSTREAM_CONNECT_TIMEOUT", self.upstream_connect_timeout),
+            ("UPSTREAM_READ_TIMEOUT", self.upstream_read_timeout),
+            ("SHUTDOWN_DRAIN_TIMEOUT", self.shutdown_drain_timeout),
+        ):
+            if seconds is not None and (not math.isfinite(seconds) or seconds <= 0):
+                raise ValueError(f"{name} must be finite and positive")
+        if self.unattributed_threshold < 0:
+            raise ValueError("UNATTRIBUTED_THRESHOLD must be nonnegative")
+        for host in self.dashboard_allowed_hosts:
+            if not host or any(c in host for c in "*/:?#@ \t\r\n"):
+                raise ValueError(
+                    "DASHBOARD_ALLOWED_HOSTS must contain exact hostnames without ports"
+                )
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -46,25 +96,21 @@ class Settings:
             gufo_api_key=env.get("GUFO_API_KEY", ""),
             database_path=env.get("DATABASE_PATH", cls.database_path),
             dashboard_host=env.get("DASHBOARD_HOST", cls.dashboard_host),
-            dashboard_port=int(env.get("DASHBOARD_PORT", cls.dashboard_port)),
+            dashboard_port=_int_env("DASHBOARD_PORT", cls.dashboard_port),
+            dashboard_allowed_hosts=tuple(
+                host.strip().lower().rstrip(".")
+                for host in env.get("DASHBOARD_ALLOWED_HOSTS", "localhost").split(",")
+            ),
             capture_content=env.get("CAPTURE_CONTENT", "false").lower() in ("true", "1", "yes"),
-            content_retention_days=int(
-                env.get("CONTENT_RETENTION_DAYS", cls.content_retention_days)
+            content_retention_days=_int_env("CONTENT_RETENTION_DAYS", cls.content_retention_days),
+            content_max_bytes=_int_env("CONTENT_MAX_BYTES", cls.content_max_bytes),
+            retention_days=_int_env("RETENTION_DAYS", cls.retention_days),
+            poll_interval_seconds=_float_env("POLL_INTERVAL_SECONDS", cls.poll_interval_seconds),
+            upstream_connect_timeout=_float_env(
+                "UPSTREAM_CONNECT_TIMEOUT", cls.upstream_connect_timeout
             ),
-            content_max_bytes=int(env.get("CONTENT_MAX_BYTES", cls.content_max_bytes)),
-            retention_days=int(env.get("RETENTION_DAYS", cls.retention_days)),
-            poll_interval_seconds=float(
-                env.get("POLL_INTERVAL_SECONDS", cls.poll_interval_seconds)
-            ),
-            upstream_connect_timeout=float(
-                env.get("UPSTREAM_CONNECT_TIMEOUT", cls.upstream_connect_timeout)
-            ),
-            upstream_read_timeout=_float_or_none(env.get("UPSTREAM_READ_TIMEOUT")),
-            stats_queue_size=int(env.get("STATS_QUEUE_SIZE", cls.stats_queue_size)),
-            shutdown_drain_timeout=float(
-                env.get("SHUTDOWN_DRAIN_TIMEOUT", cls.shutdown_drain_timeout)
-            ),
-            unattributed_threshold=int(
-                env.get("UNATTRIBUTED_THRESHOLD", cls.unattributed_threshold)
-            ),
+            upstream_read_timeout=_float_env("UPSTREAM_READ_TIMEOUT", None),
+            stats_queue_size=_int_env("STATS_QUEUE_SIZE", cls.stats_queue_size),
+            shutdown_drain_timeout=_float_env("SHUTDOWN_DRAIN_TIMEOUT", cls.shutdown_drain_timeout),
+            unattributed_threshold=_int_env("UNATTRIBUTED_THRESHOLD", cls.unattributed_threshold),
         )
