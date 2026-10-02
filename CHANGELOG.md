@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Separate execution sessions from conversation-cache limits and budgets in the
+  Cache panel. Keep retained checkpoint occupancy explicitly unavailable.
+- Add hover explanations for summary cards, chart metrics, activity fields,
+  request timings, scheduler counters, cache diagnostics, and extra Gufo metrics.
+  Explain formulas, units, coverage limits, and unknown measurements.
+
 ## 0.2.0 — 2026-10-01
 
 - Support Gufo 0.4.0 prefill-only token counters while preserving older server
