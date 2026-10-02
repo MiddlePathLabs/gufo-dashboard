@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 — 2026-10-02
 
 - Separate execution sessions from conversation-cache limits and budgets in the
   Cache panel. Keep retained checkpoint occupancy explicitly unavailable.
