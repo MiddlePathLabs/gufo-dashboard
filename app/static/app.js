@@ -370,15 +370,17 @@
   }
   function cachePressureView() {
     const p = state.status?.cache_pressure;
-    const heading = '<h3 class="insight-subhead">CURRENT GUFO CACHE PRESSURE</h3>';
+    const heading = '<h3 class="insight-subhead">CURRENT GUFO EXECUTION AND CACHE</h3>';
     if (!p?.available) return heading + '<p class="note">Cache diagnostics unavailable' + (p?.status === "stale" ? " (observer stale)." : ".") + '</p>';
     const bytes = (n) => isNum(n) ? `${(n / (1024 ** 3)).toFixed(2)} GiB` : DASH;
     const rows = [
-      ["RAM snapshot slots (limit)", fInt(p.snapshot_entry_limit)],
-      ["RAM snapshot budget", bytes(p.ram_capacity_bytes)],
+      ["RAM cache budget", bytes(p.ram_capacity_bytes)],
+      ["RAM checkpoint limit", fInt(p.snapshot_entry_limit)],
+      ["Retained RAM checkpoints", "Unavailable"],
       ["Observed RAM entry evictions", fInt(p.ram_entry_evictions)],
       ["RAM captures skipped", fInt(p.ram_skipped)],
-      ["Disk snapshot budget", bytes(p.disk_capacity_bytes)],
+      ["Disk cache budget", bytes(p.disk_capacity_bytes)],
+      ["Retained disk checkpoints", "Unavailable"],
       ["Observed disk LRU evictions", fInt(p.disk_lru_evictions)],
       ["Disk captures skipped", fInt(p.disk_skipped)],
       ["Gufo version", esc(p.gufo_version || "unknown")],
@@ -389,7 +391,10 @@
       `${fDateTime(e.ts_ms)} · ${e.tier === "ram" ? "RAM" : "Disk"}`,
       esc(`${e.action} · ${e.reason}`),
     ]);
-    return heading + kvRows(rows) + '<p class="note">Current server, retained log window. RAM counts cover entry-limit evictions only; byte-limit removals and live slot occupancy are not reported. Missing values are unavailable.</p>'
+    return heading + '<h3 class="insight-subhead">EXECUTION</h3>'
+      + kvRows([["Execution sessions", fInt(p.sessions)]])
+      + '<h3 class="insight-subhead">CONVERSATION CACHE</h3>' + kvRows(rows)
+      + '<p class="note">Execution sessions and cache retention have separate limits. One conversation can retain multiple checkpoints. Budgets and checkpoint limits show capacity; retained checkpoint counts are unavailable. Eviction counts cover retained logs: RAM entry-limit removals and disk LRU removals only. RAM byte-limit removals are not reported. Missing values are unavailable.</p>'
       + (p.log_level === "warn" || p.log_level === "error" ? '<p class="note warn">Restricted log level hides capacity startup lines and disk LRU events. Use info or debug for coverage.</p>' : '')
       + (events.length ? '<h3 class="insight-subhead">RECENT CACHE PRESSURE EVENTS</h3>' + kvRows(events) : '');
   }

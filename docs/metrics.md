@@ -80,6 +80,14 @@ limit can shorten that window. Live occupied-slot counts are unavailable; RAM
 byte-limit removals are deliberately suppressed by Gufo and cannot be counted.
 Capacity is a budget, not measured allocation.
 
+The Cache panel separates execution sessions from conversation-cache retention.
+In Gufo 0.5.0, the RAM checkpoint limit is 128 independently of `--sessions`;
+one conversation can retain multiple checkpoints. The panel reads sessions,
+checkpoint limits, and byte budgets from separate observer fields. It shows
+retained RAM and disk checkpoint counts as unavailable because Gufo does not
+report occupancy. The automatic RAM budget has a 32 GiB ceiling, but the actual
+reported budget can be lower due to host and model memory constraints.
+
 The observer reads Docker logs on the host and exports only selected numeric
 fields and fixed event types. The dashboard never receives raw logs or a Docker
 socket. At `warn`, Gufo hides startup capacity lines and INFO-tier disk LRU events;

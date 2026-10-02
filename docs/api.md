@@ -187,7 +187,8 @@ from the proxy’s in-flight count and statistics-writer queue.
 
 `cache_pressure` contains the optional host observer’s snapshot: `available`,
 `status`, `gufo_version` (runtime image version), `log_level`, capacity budgets,
-`snapshot_entry_limit`, observed eviction/skip counts, a bounded `events` list,
+`sessions` (execution sessions), `snapshot_entry_limit` (RAM checkpoint limit),
+observed eviction/skip counts, a bounded `events` list,
 and observation/window timestamps. `capabilities.cache_pressure` is true only
 for a fresh successful snapshot containing recognized RAM or disk diagnostics.
 A version string alone never enables a feature. Missing, stale, unknown, or
