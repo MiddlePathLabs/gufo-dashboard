@@ -374,25 +374,25 @@
     if (!p?.available) return heading + '<p class="note">Cache diagnostics unavailable' + (p?.status === "stale" ? " (observer stale)." : ".") + '</p>';
     const bytes = (n) => isNum(n) ? `${(n / (1024 ** 3)).toFixed(2)} GiB` : DASH;
     const rows = [
-      ["RAM cache budget", bytes(p.ram_capacity_bytes)],
-      ["RAM checkpoint limit", fInt(p.snapshot_entry_limit)],
-      ["Retained RAM checkpoints", "Unavailable"],
-      ["Observed RAM entry evictions", fInt(p.ram_entry_evictions)],
-      ["RAM captures skipped", fInt(p.ram_skipped)],
-      ["Disk cache budget", bytes(p.disk_capacity_bytes)],
-      ["Retained disk checkpoints", "Unavailable"],
-      ["Observed disk LRU evictions", fInt(p.disk_lru_evictions)],
-      ["Disk captures skipped", fInt(p.disk_skipped)],
-      ["Gufo version", esc(p.gufo_version || "unknown")],
-      ["Log level", esc(p.log_level || "unknown")],
-      ["Log window starts", isNum(p.window_start_ms) ? esc(fDateTime(p.window_start_ms)) : DASH],
+      ["RAM cache budget", bytes(p.ram_capacity_bytes), "Maximum bytes allowed for RAM snapshots and captures in progress, not current usage or total server memory. Gufo 0.5 defaults to an automatic ceiling of 32 GiB, reduced by host and model memory limits."],
+      ["RAM checkpoint limit", fInt(p.snapshot_entry_limit), "Maximum retained RAM checkpoint records. Gufo 0.5 allows 128 independently of execution sessions. One conversation can use several records; the byte budget can fill first."],
+      ["Retained RAM checkpoints", "Unavailable", "Gufo does not report the current number of retained RAM checkpoints. The checkpoint limit is capacity, not occupancy."],
+      ["Observed RAM entry evictions", fInt(p.ram_entry_evictions), "Checkpoint removals reported because the RAM entry limit was reached, counted within retained logs. RAM byte-budget removals are not logged and are excluded."],
+      ["RAM captures skipped", fInt(p.ram_skipped), "RAM snapshot captures reported as skipped within retained logs, for example because an entry or byte limit prevented capture. This is not a request failure count."],
+      ["Disk cache budget", bytes(p.disk_capacity_bytes), "Maximum retained disk-cache bytes when disk caching is configured. This is a budget, not current disk usage. Missing diagnostics remain unavailable."],
+      ["Retained disk checkpoints", "Unavailable", "Gufo does not report the current number of stored disk checkpoints. Eviction logs cannot reconstruct that count."],
+      ["Observed disk LRU evictions", fInt(p.disk_lru_evictions), "Disk checkpoints removed to stay within the disk budget, oldest accessed first (least recently used). Counts cover retained logs; other removal reasons are excluded."],
+      ["Disk captures skipped", fInt(p.disk_skipped), "Allowlisted disk-cache skip events counted within retained logs. The observer currently excludes Gufo 0.5 min_step skips, which avoid saving checkpoints that barely advance a stored prefix."],
+      ["Gufo version", esc(p.gufo_version || "unknown"), "Runtime image version read by the host cache observer. A version alone does not prove a metric is available."],
+      ["Log level", esc(p.log_level || "unknown"), "Gufo log verbosity. Info or debug exposes startup capacities and disk LRU events; warn or error hides some diagnostics."],
+      ["Log window starts", isNum(p.window_start_ms) ? esc(fDateTime(p.window_start_ms)) : DASH, "Earliest timestamp in the observer's retained log window. Event counts cover this window, not all-time history; log rotation or the tail limit can shorten it."],
     ];
     const events = (p.events || []).slice(-5).reverse().map((e) => [
       `${fDateTime(e.ts_ms)} · ${e.tier === "ram" ? "RAM" : "Disk"}`,
       esc(`${e.action} · ${e.reason}`),
     ]);
     return heading + '<h3 class="insight-subhead">EXECUTION</h3>'
-      + kvRows([["Execution sessions", fInt(p.sessions)]])
+      + kvRows([["Execution sessions", fInt(p.sessions), "Preallocated execution sessions configured by --sessions. This limits execution capacity; it does not set the number of remembered conversations or retained checkpoints."]])
       + '<h3 class="insight-subhead">CONVERSATION CACHE</h3>' + kvRows(rows)
       + '<p class="note">Execution sessions and cache retention have separate limits. One conversation can retain multiple checkpoints. Budgets and checkpoint limits show capacity; retained checkpoint counts are unavailable. Eviction counts cover retained logs: RAM entry-limit removals and disk LRU removals only. RAM byte-limit removals are not reported. Missing values are unavailable.</p>'
       + (p.log_level === "warn" || p.log_level === "error" ? '<p class="note warn">Restricted log level hides capacity startup lines and disk LRU events. Use info or debug for coverage.</p>' : '')
