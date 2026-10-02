@@ -183,6 +183,133 @@
   }
   const unit = (u) => `<span class="unit">${u}</span>`;
 
+  // Shared definitions keep cards, charts and request details consistent.
+  const STAT_HELP = {
+    "Requests": "Completed requests recorded through this proxy in the selected range and model. Stream and vision counts can overlap. Direct Gufo traffic is excluded.",
+    "In flight": "Requests currently open through this proxy, including waiting and generating requests. Oldest is the longest elapsed request. Gufo-wide processing and deferred counts are separate.",
+    "Error rate": "Recorded HTTP errors (status 400 or higher) or upstream-unreachable failures divided by recorded requests. Client cancellations are counted separately.",
+    "Generated tokens": "Sum of reported output tokens in the selected range. Reasoning tokens are a separately reported subset when available, not an extra total to add.",
+    "Prompt tokens": "Sum of reported input tokens, including cached tokens. Cached shows the portion reused rather than newly prefilled.",
+    "Weighted decode": "1000 × summed generated tokens / summed decode milliseconds, using requests with positive counts and durations. p50 is the median request rate; n shows coverage out of all requests. All-time percentiles cover retained requests only.",
+    "Weighted prefill": "1000 × summed newly prefilled tokens / summed prefill milliseconds, using requests with positive counts and durations. Full cache hits have no prefill rate. p50 is the median; n shows coverage. All-time percentiles cover retained requests only.",
+    "TTFT": "Time to first token: Gufo-reported when available, otherwise measured by the proxy for the first non-empty streamed text or reasoning delta. Response headers and progress events are not tokens.",
+    "TTFT p50": "Median time to first token; p95 is the value at the 95th percentile. n shows requests with TTFT out of all requests; proxy indicates proxy-measured coverage. All-time percentiles cover retained requests only.",
+    "Draft acceptance": "Sum of accepted speculative draft tokens divided by sum of proposed draft tokens, for requests reporting both counts. n shows reporting requests out of all requests. This is not a speedup measurement.",
+    "Cache hit": "Requests reporting cache_hit=true divided by requests reporting a cache-hit result. A hit can reuse only part of a prompt. n shows reporting requests out of all requests.",
+    "Drafted tokens": "Total speculative draft tokens proposed, using requests with both proposed and accepted counts.",
+    "Accepted tokens": "Proposed speculative tokens accepted by the target model, using requests reporting both draft counts.",
+    "Requests with draft stats": "Requests reporting both proposed and accepted draft-token counts, divided by all recorded requests for this model and range.",
+    "Hits / misses": "Counts of explicit cache_hit=true and cache_hit=false results. Requests without a reported cache result are excluded.",
+    "Requests with cache data": "Requests with an explicit cache-hit result, divided by all recorded requests for this model and range.",
+    "Cached tokens": "Reported prompt tokens reused from cache. Aggregate totals include available counts even when no cache-hit flag was reported.",
+    "Cached-token share": "Summed cached tokens divided by summed prompt tokens, using requests that report both values. This measures token reuse, not the fraction of requests that hit cache.",
+    "Avg restore (hits)": "Average reported cache-restore duration among cache hits with a restore timing. Missing timings are excluded.",
+    "tokens_predicted_total": "Gufo's generated-token counter since the engine counter was reset, including direct and proxied traffic. The dashboard tracks resets when estimating unattributed work.",
+    "Gufo requests processing": "Gufo-wide admitted requests, including cache preparation and direct traffic. This is a live count, not the configured execution-session limit.",
+    "Gufo requests deferred": "Gufo-wide requests waiting for an execution session, including direct traffic. This is separate from the proxy and statistics-write queues.",
+    "Last prefill tok/s (Gufo)": "Gufo's latest nonzero prompt-processing rate gauge. It can remain from an earlier request and is not a selected-range average or a live rate.",
+    "Last decode tok/s (Gufo)": "Gufo's latest nonzero generation-rate gauge. It can remain from an earlier request and is not a selected-range average or a live rate.",
+    "Unattributed Gufo tokens": "Reset-aware Gufo counter increases minus work recorded by the proxy since an idle baseline. Often direct traffic; cancellations and missing statistics can skew it. Hidden while requests or statistics writes are pending or below the threshold.",
+    "Baseline": "Time when both proxy and upstream requests were idle and the dashboard started comparing Gufo counter increases with recorded work.",
+    "Cancelled (since baseline)": "Recorded requests ending with client_cancelled in the unattributed-token comparison window. Partial or missing usage can affect that estimate.",
+    "Stats dropped (queue full)": "Statistics records rejected because the dashboard writer queue was full, counted during this dashboard process. Response forwarding continues.",
+    "Extraction errors": "Unexpected statistics-extraction failures counted during this dashboard process. Some requests may have incomplete metrics.",
+    "Write errors": "Statistics-writer failures counted during this dashboard process. Failed writes can leave gaps in recorded history.",
+    "Rows written": "Request-statistics rows successfully written during this dashboard process. This is not the number of rows in the entire database.",
+    "Request ID": "Dashboard database identifier for this recorded request.",
+    "Gufo request ID": "Validated request identifier supplied by Gufo, when available. Separate from the dashboard database ID.",
+    "Model": "Model identifier associated with this request. Unknown means neither the request nor response supplied a usable model identifier.",
+    "HTTP status": "HTTP response status returned to the client. Errors that occur after a stream starts can also appear as an error code despite status 200.",
+    "Error code": "Validated upstream or proxy error identifier. Raw upstream error messages are not stored.",
+    "Finish reason": "Why generation ended, such as stop, length, or client_cancelled. Responses API entries can include terminal status and incomplete reason.",
+    "Streaming": "Whether this request requested a streamed response rather than one buffered response.",
+    "Vision / images": "Whether image inputs were detected in the request and how many image references were counted. This does not measure image tokens or prove the model accepted the images.",
+    "TTFT source": "gufo means server-reported time to first token; proxy_stream means proxy-measured first non-empty streamed text or reasoning delta. Missing means no TTFT measurement was available.",
+    "Prompt": "Reported total input tokens for this request, including cached tokens.",
+    "Cached": "Reported input tokens reused from cache for this request.",
+    "Prefilled": "Input tokens actually processed during prefill, excluding reused cached tokens.",
+    "Generated": "Reported output-token count for this request, including reasoning when the upstream includes it in usage.",
+    "Reasoning": "Separately reported reasoning-token count. Missing means the endpoint did not provide a count; it does not mean no reasoning occurred.",
+    "Prefill tok/s": "This request's newly prefilled tokens divided by prefill seconds, or the reported rate when counts/timing are insufficient. Full cache hits have no prefill rate.",
+    "Decode tok/s": "This request's generated tokens divided by decode seconds, or the reported rate when counts/timing are insufficient. Excludes queue and prefill time.",
+    "Mean inter-token": "Gufo-reported average gap between generated token deliveries in milliseconds. Missing endpoints do not provide this measurement.",
+    "Max inter-token": "Gufo-reported longest gap between generated token deliveries in milliseconds.",
+    "Proxy TTFB": "Elapsed proxy time until upstream response headers arrive. This is time to first byte, not time to first generated token.",
+    "Proxy first token": "Elapsed proxy time until the first non-empty streamed text or reasoning delta arrives, including upstream waiting and network overhead.",
+    "Total duration": "Elapsed proxy time from receiving the request to completion or interruption. Includes queue, prefill, generation and transfer overhead.",
+    "Drafted": "Speculative tokens proposed for this request. These are candidate tokens, not additional generated output to add to the total.",
+    "Accepted": "Speculative draft tokens accepted by the target model for this request.",
+    "Acceptance": "Accepted draft tokens divided by proposed draft tokens for this request. Unavailable when no positive draft count is reported.",
+    "Result": "Gufo's explicit cache-hit result. HIT can represent partial prompt reuse; unavailable means no cache-hit flag was provided.",
+    "Miss reason": "Gufo's explanation for an explicit cache miss. A missing reason does not imply a particular cause.",
+    "Common prefix": "Tokens shared with a cache candidate, as reported by Gufo. A common prefix alone does not guarantee a usable retained checkpoint.",
+    "Restore": "Gufo-reported time spent restoring cached state, in milliseconds.",
+    "Restore size": "Bytes of cached state restored for this request, as reported by Gufo.",
+    "Execution plan": "Gufo's reported scheduling strategy, such as serial fallback. This describes the request's execution, not cache retention.",
+    "Queue": "Gufo-reported waiting time before execution, in milliseconds. Separate from prefill and decode durations.",
+    "Queue depth at submit": "Gufo-reported scheduler queue depth when this request was submitted.",
+    "Client queue depth": "Gufo-reported client queue depth at submission. Separate from the dashboard's statistics-write queue.",
+    "Resident requests": "Gufo-reported resident-request count when this request was admitted.",
+    "Logical concurrency": "Requested logical concurrency reported by Gufo. It does not guarantee simultaneous physical execution.",
+    "Physical execution width": "Physical execution width reported by Gufo for this request, which can differ from logical concurrency.",
+    "Prefill chunks": "Number of prompt-processing chunks reported for this request. Chunks allow prefill to be scheduled alongside other work.",
+    "Context": "Configured maximum context tokens reported for the loaded model. This is a limit, not current memory usage.",
+    "Context used": "Reported prompt plus generated tokens divided by the model's configured context length. This is a token estimate, not KV memory utilization.",
+  };
+  const HELP_ALIASES = {
+    "Weighted decode tok/s": "Weighted decode", "Hit rate": "Cache hit",
+    "decode_tps": "Weighted decode", "prefill_tps": "Weighted prefill",
+    "ttft_p50_ms": "TTFT p50", "draft_acceptance": "Draft acceptance", "cache_hit_rate": "Cache hit",
+  };
+  function statHelp(label) {
+    return STAT_HELP[HELP_ALIASES[label] || label];
+  }
+  const helpTitle = (label) => `title="${esc(statHelp(label))}"`;
+  function chartHelp(text) {
+    // Chart.js tooltips need explicit line breaks to fit inside the canvas.
+    return text.match(/.{1,64}(?:\s|$)|\S+/g).map((line) => line.trim());
+  }
+  const MISS_HELP = {
+    no_checkpoint: "No usable retained checkpoint was found for this request.",
+    prefix_changed: "The prompt prefix changed and Gufo could not reuse a suitable checkpoint.",
+    input_changed: "The cache input identity changed, such as image inputs or other prompt context.",
+    disabled: "Cache lookup was disabled for this request.",
+    unknown: "Gufo reported a miss without a usable reason.",
+  };
+  const EXTRA_HELP = {
+    cache_checkpoint_tokens: "Token position of the cache checkpoint reported by Gufo. This is not the number of retained checkpoints.",
+    cache_snapshot_bytes: "Bytes of RAM snapshots captured for this request, not total retained cache usage.",
+    cache_disk_queued_bytes: "Snapshot bytes queued for disk persistence by this request, not total disk occupancy.",
+    cache_shared_bytes: "Bytes reported by Gufo for shared cached state in this request.",
+    cache_snapshot_ms: "Time spent capturing cache snapshots for this request, in milliseconds.",
+    cache_disk_enqueue_ms: "Time spent queuing disk-cache persistence for this request, in milliseconds.",
+    cache_disk_hit: "Whether this request reused a checkpoint from the persistent disk cache.",
+    cache_shared_prefix_snapshots: "Shared-prefix snapshots captured for this request, not the number of conversations in cache.",
+    cache_shared_prefix_bytes: "Bytes captured for shared-prefix snapshots in this request.",
+    cache_shared_prefix_ms: "Time spent capturing shared-prefix snapshots for this request, in milliseconds.",
+    cache_shared_prefix_failures: "Shared-prefix snapshot capture failures reported for this request.",
+    active_decode_prefill_chunks: "Prefill chunks processed while decode work was active, as reported by Gufo.",
+    max_prefill_chunk_tokens: "Largest prompt-processing chunk for this request, measured in tokens.",
+  };
+  function extraHelp(key, value) {
+    if (EXTRA_HELP[key]) return EXTRA_HELP[key];
+    const units = typeof value === "boolean" ? "Boolean flag." : /bytes$/.test(key) ? "Measured in bytes." : /_ms$/.test(key) ? "Measured in milliseconds." : "Numeric value.";
+    return `Additional per-request usage.gufo field: ${key}. ${units} Its detailed meaning is not defined by this dashboard.`;
+  }
+  const CARD_HELP = { inflight: "In flight", decode: "Weighted decode", prefill: "Weighted prefill", ttft: "TTFT p50", errors: "Error rate", requests: "Requests", gen: "Generated tokens", prompt: "Prompt tokens", cache: "Cache hit", draft: "Draft acceptance" };
+  document.querySelectorAll("[data-card]").forEach((el) => { el.title = statHelp(CARD_HELP[el.dataset.card]) + " A dash means unavailable, not zero. Performance and efficiency rates require a selected model."; });
+  document.querySelectorAll("[data-metric]").forEach((el) => { el.title = statHelp(el.dataset.metric); });
+  $("cur-ctx").parentElement.title = statHelp("Context");
+  $("cur-model").parentElement.title = "Model currently loaded in Gufo. Selected-range statistics can also include previously loaded models.";
+  $("status-text").title = "Online means the latest Gufo readiness poll succeeded. Offline means Gufo was not ready or the poll failed.";
+  $("refresh-text").title = "Age of the latest successful refresh. Pausing affects dashboard refreshes, not Gufo inference or request recording.";
+  $("capture-status").title = "Whether future proxied questions and visible answers are captured, with the configured retention in days. Numeric metrics are recorded separately.";
+  $("c-inflight-sub").title = "Oldest is elapsed time for the longest open proxy request. During prefill, cached / processed / total are token counts from the oldest matching progress event; processed includes cached tokens. Progress is transient and requires the client to request it.";
+  const feedHelp = ["Request completion time, or event time for lifecycle entries.", "API endpoint and request flags. Selecting a row opens its measurements.", "Reported prompt tokens → generated tokens. Prompt counts include cached tokens.", statHelp("Decode tok/s"), statHelp("Total duration"), statHelp("HTTP status")];
+  document.querySelectorAll(".feed-head > span").forEach((el, i) => { el.title = feedHelp[i]; });
+  $("chart-primary").title = "Recorded requests and reported generated tokens in each time bucket. Hover over a plotted point for its values and explanation.";
+  $("chart-secondary").title = "Selected performance or efficiency metric per model and time bucket. Gaps mean no usable data. Hover over a plotted point for its values and explanation.";
+
   function pctLabel(s) {
     if (state.range !== "all" || !s.percentile_window_start_ms) return "";
     const days = Math.max(1, Math.ceil((Date.now() - s.percentile_window_start_ms) / 86400000));
@@ -250,7 +377,9 @@
     options: {
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { title: tooltipTitle } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: tooltipTitle,
+        afterLabel: (c) => chartHelp(statHelp(c.datasetIndex === 0 ? "Requests" : "Generated tokens") + " Values are for this time bucket."),
+      } } },
       scales: {
         x: timeAxis(),
         y: { beginAtZero: true, ticks: { precision: 0, maxTicksLimit: 5 }, title: { display: false } },
@@ -275,7 +404,7 @@
       plugins: { legend: { display: false }, tooltip: { callbacks: {
         title: tooltipTitle,
         label: (c) => `${c.dataset.label}: ${METRIC_FMT[state.metric].fmt(c.parsed.y)}`,
-        afterLabel: () => /tps$/.test(state.metric) ? "1000 × Σ tokens / Σ ms in this bucket" : "",
+        afterLabel: () => chartHelp(statHelp(state.metric) + " Values are for this model and time bucket."),
       } } },
       scales: { x: timeAxis(), y: { beginAtZero: true, ticks: { maxTicksLimit: 5 } } },
     },
@@ -316,6 +445,7 @@
     secondary.options.scales.y.max = m.pct ? 1 : undefined;
     secondary.update();
     const legend = $("secondary-legend");
+    legend.title = statHelp(state.metric) + " Daily indicates daily rollups; gaps mean no usable data in that bucket.";
     legend.innerHTML = names.length > 1 || !state.model
       ? names.map((n, i) => `<i class="sw" style="background:${SERIES[i % SERIES.length]}"></i>${esc(n.length > 24 ? n.slice(0, 22) + "…" : n)}`).join(" ")
       : `<span>${esc(m.label)}${lastTs.source === "rollup" ? " · daily" : ""}</span>`;
@@ -363,7 +493,10 @@
   // ---------------------------------------------------------------- insights
   let spec = null, cache = null;
   function kvRows(rows) {
-    return `<table class="kvt">${rows.map(([k, v, title]) => `<tr${title ? ` title="${esc(title)}"` : ""}><th>${esc(k)}</th><td>${v}</td></tr>`).join("")}</table>`;
+    return `<table class="kvt">${rows.map(([k, v, title]) => {
+      const help = title || statHelp(k);
+      return `<tr${help ? ` title="${esc(help + " A dash means unavailable, not zero.")}"` : ""}><th>${esc(k)}</th><td>${v}</td></tr>`;
+    }).join("")}</table>`;
   }
   function modelHead(name, many) {
     return many ? `<div class="model-h" title="${esc(name)}">${esc(name || "(unknown model)")}</div>` : "";
@@ -390,6 +523,7 @@
     const events = (p.events || []).slice(-5).reverse().map((e) => [
       `${fDateTime(e.ts_ms)} · ${e.tier === "ram" ? "RAM" : "Disk"}`,
       esc(`${e.action} · ${e.reason}`),
+      `Observed ${e.tier === "ram" ? "RAM" : "disk"} cache ${e.action} event at this timestamp. Reason: ${e.reason}. Events cover the retained log window, not all-time history.`,
     ]);
     return heading + '<h3 class="insight-subhead">EXECUTION</h3>'
       + kvRows([["Execution sessions", fInt(p.sessions), "Preallocated execution sessions configured by --sessions. This limits execution capacity; it does not set the number of remembered conversations or retained checkpoints."]])
@@ -427,7 +561,7 @@
           ["Avg restore (hits)", fMs(m.restore_avg_ms)],
           ["Saved prefill (estimate)", isNum(m.saved_prefill_s_estimate) ? fMs(m.saved_prefill_s_estimate * 1000) : DASH,
             "Σ cached tokens ÷ this model's weighted prefill tok/s. An estimate."],
-        ]) + (reasons.length ? `<h3 class="insight-subhead">MISS REASONS</h3>${kvRows(reasons.map(([r, n]) => [r, fInt(n)]))}` : "");
+        ]) + (reasons.length ? `<h3 class="insight-subhead">MISS REASONS</h3>${kvRows(reasons.map(([r, n]) => [r, fInt(n), `${MISS_HELP[r] || "Cache-miss reason supplied by Gufo; its detailed meaning is not defined by this dashboard."} Count of misses in retained requests for the selected range and model. All-time breakdowns cover retained raw rows only.`]))}` : "");
       }).join("") + `<p class="note">Saved prefill is an estimate.${state.range === "all" ? " Miss reasons cover retained rows only." : ""}</p>` + cachePressureView();
     } else {
       const s = state.status;
@@ -443,13 +577,13 @@
         unNote = "Likely direct :8080 traffic. Other explanations: dropped or failed stats rows, cancelled requests, requests still in flight.";
       } else un = "none";
       body.innerHTML = kvRows([
-        ["prompt_tokens_total", fInt(c.prompt), s.prompt_counter_excludes_cached ? "prefill only; cached tokens excluded" : "includes cached tokens"],
+        ["prompt_tokens_total", fInt(c.prompt), `Gufo's prompt-token counter since the engine counter was reset, including direct and proxied traffic. ${s.prompt_counter_excludes_cached ? "Counts newly prefilled tokens only; cached tokens are excluded." : "Counts full prompt tokens, including cached tokens."}`],
         ["tokens_predicted_total", fInt(c.predicted)],
         ["Gufo requests processing", fInt(s.upstream_requests?.processing)],
-        ["Gufo requests deferred", fInt(s.upstream_requests?.deferred), "Waiting for a Gufo session; not the proxy request queue"],
+        ["Gufo requests deferred", fInt(s.upstream_requests?.deferred)],
         ["Last prefill tok/s (Gufo)", fTps(s.gauges?.last_request_prefill_tps)],
         ["Last decode tok/s (Gufo)", fTps(s.gauges?.last_request_decode_tps)],
-        ["Unattributed Gufo tokens", un, u.available ? `since ${fDateTime(u.baseline_ms)}` : ""],
+        ["Unattributed Gufo tokens", un, statHelp("Unattributed Gufo tokens") + (u.available ? ` Baseline: ${fDateTime(u.baseline_ms)}.` : "")],
         ["In flight", fInt(s.in_flight.count)],
         ["Baseline", u.available ? esc(fDateTime(u.baseline_ms)) : "waiting for idle"],
         ["Cancelled (since baseline)", fInt(u.cancelled_in_window)],
@@ -494,20 +628,20 @@
         + `<span class="what"><span class="ev-kind ${cls}">${esc(tag)}</span><span class="mdl" title="${esc(text(it))}">${esc(text(it))}</span></span><span></span><span></span><span></span><span></span></div>`;
     }
     const badges = [];
-    if (it.is_streaming) badges.push(`<span class="badge">STREAM</span>`);
-    if (it.is_vision) badges.push(`<span class="badge" title="${esc(it.image_count)} image(s)">VISION</span>`);
-    if (it.cache_hit === 1) badges.push(`<span class="badge hit">HIT</span>`);
-    else if (it.cache_hit === 0) badges.push(`<span class="badge miss">MISS</span>`);
-    if (it.error_code) badges.push(`<span class="badge err">${esc(it.error_code)}</span>`);
+    if (it.is_streaming) badges.push(`<span class="badge" ${helpTitle("Streaming")}>STREAM</span>`);
+    if (it.is_vision) badges.push(`<span class="badge" title="${esc(statHelp("Vision / images"))} ${esc(it.image_count)} image(s).">VISION</span>`);
+    if (it.cache_hit === 1) badges.push(`<span class="badge hit" ${helpTitle("Result")}>HIT</span>`);
+    else if (it.cache_hit === 0) badges.push(`<span class="badge miss" ${helpTitle("Result")}>MISS</span>`);
+    if (it.error_code) badges.push(`<span class="badge err" ${helpTitle("Error code")}>${esc(it.error_code)}</span>`);
     const ep = ENDPOINT_SHORT[it.endpoint] || it.endpoint;
     const tok = isNum(it.prompt_tokens) || isNum(it.completion_tokens)
       ? `${fCompact(it.prompt_tokens)}<span class="arrow">→</span>${fCompact(it.completion_tokens)}` : DASH;
     return `<div role="listitem"><button type="button" class="feed-row${it.id === state.selectedId ? " sel" : ""}" title="${esc(it.model || "unknown model")} · HTTP ${esc(it.http_status || "unknown")}" data-id="${it.id}" data-cursor="${esc(it.cursor)}" aria-pressed="${it.id === state.selectedId}" aria-label="Inspect ${esc(ep)} request ${it.id}, ${esc(it.model || "unknown model")}, ${fDateTime(it.completed_at_ms)}, ${fMs(it.total_request_ms)}, HTTP ${esc(it.http_status || "unknown")}" tabindex="-1">`
-      + `<span class="t num">${fTime(it.completed_at_ms)}</span>`
-      + `<span class="what"><span class="ep">${esc(ep)}</span>${badges.join("")}${!state.model ? `<span class="mdl" title="${esc(it.model)}">${esc(it.model || "")}</span>` : ""}</span>`
-      + `<span class="tok">${tok}</span>`
-      + `<span class="r c-tps">${fTps(it.completion_tokens_per_second)}</span>`
-      + `<span class="r c-dur">${fMs(it.total_request_ms)}</span>`
+      + `<span class="t num" title="Request completion time: ${esc(fDateTime(it.completed_at_ms))}">${fTime(it.completed_at_ms)}</span>`
+      + `<span class="what"><span class="ep" title="API endpoint used by this request.">${esc(ep)}</span>${badges.join("")}${!state.model ? `<span class="mdl" title="${esc(statHelp("Model"))} ${esc(it.model)}">${esc(it.model || "")}</span>` : ""}</span>`
+      + `<span class="tok" title="Reported prompt tokens → generated tokens for this request. Prompt counts include cached tokens; a dash means unavailable.">${tok}</span>`
+      + `<span class="r c-tps" ${helpTitle("Decode tok/s")}>${fTps(it.completion_tokens_per_second)}</span>`
+      + `<span class="r c-dur" ${helpTitle("Total duration")}>${fMs(it.total_request_ms)}</span>`
       + statusDot(it) + `</button></div>`;
   }
   function renderFeed() {
@@ -729,35 +863,36 @@
       // No Gufo timings: show what the proxy saw.
       if (!isNum(r.total_request_ms)) return "";
       const total = Math.max(1, r.total_request_ms);
-      const mark = (v, label) => (isNum(v) ? `<div class="tl-marker" style="left:${Math.min(100, (100 * v) / total)}%" title="${label} ${fMs(v)}"></div>` : "");
+      const mark = (v, label) => (isNum(v) ? `<div class="tl-marker" style="left:${Math.min(100, (100 * v) / total)}%" title="${label} ${fMs(v)}. ${esc(statHelp(label))}"></div>` : "");
       return `<section class="timeline" aria-label="Request timing"><h3>Request timing</h3><div class="tl-bar"><div class="tl-seg tl-decode" style="width:100%;opacity:.35"></div>${mark(r.ttft_ms, "TTFT")}</div>`
         + `<div class="tl-legend"><span>Proxy duration only; queue, prefill, decode unavailable.</span>`
-        + `<span>TTFB ${fMs(r.proxy_ttfb_ms)}</span>${isNum(r.ttft_ms) ? `<span>TTFT ${fMs(r.ttft_ms)}</span>` : ""}<span>total ${fMs(r.total_request_ms)}</span></div></section>`;
+        + `<span ${helpTitle("Proxy TTFB")}>TTFB ${fMs(r.proxy_ttfb_ms)}</span>${isNum(r.ttft_ms) ? `<span ${helpTitle("TTFT")}>TTFT ${fMs(r.ttft_ms)}</span>` : ""}<span ${helpTitle("Total duration")}>total ${fMs(r.total_request_ms)}</span></div></section>`;
     }
     const segs = [[q, "tl-queue", "queue"], [p, "tl-prefill", "prefill"], [d, "tl-decode", "decode"]];
     const knownTotal = segs.reduce((a, [v]) => a + (isNum(v) ? v : 0), 0);
     const total = Math.max(knownTotal, r.total_request_ms || 0, r.ttft_ms || 0, 1);
-    const bar = segs.filter(([v]) => isNum(v) && v > 0).map(([v, cls, n]) => `<div class="tl-seg ${cls}" style="width:${(100 * v) / total}%" title="${n} ${fMs(v)}"></div>`).join("");
-    const marker = isNum(r.ttft_ms) ? `<div class="tl-marker" style="left:calc(${Math.min(100, (100 * r.ttft_ms) / total)}% - 1px)" title="TTFT ${fMs(r.ttft_ms)}"></div>` : "";
+    const timingHelp = { queue: statHelp("Queue"), prefill: "Gufo-reported time spent processing uncached prompt tokens, in milliseconds.", decode: "Gufo-reported time spent generating output tokens, in milliseconds." };
+    const bar = segs.filter(([v]) => isNum(v) && v > 0).map(([v, cls, n]) => `<div class="tl-seg ${cls}" style="width:${(100 * v) / total}%" title="${n} ${fMs(v)}. ${esc(timingHelp[n])}"></div>`).join("");
+    const marker = isNum(r.ttft_ms) ? `<div class="tl-marker" style="left:calc(${Math.min(100, (100 * r.ttft_ms) / total)}% - 1px)" title="TTFT ${fMs(r.ttft_ms)}. ${esc(statHelp("TTFT"))}"></div>` : "";
     return `<section class="timeline" aria-label="Request timing"><h3>Request timing</h3><div class="tl-bar">${bar}${marker}</div><div class="tl-legend">`
-      + `<span><i style="background:var(--faint)"></i>queue ${isNum(q) ? fMs(q) : "unavailable"}</span>`
-      + `<span><i style="background:var(--warn)"></i>prefill ${isNum(p) ? fMs(p) : "unavailable"}</span>`
-      + `<span><i style="background:var(--accent)"></i>decode ${isNum(d) ? fMs(d) : "unavailable"}</span>`
-      + `<span>TTFT ${fMs(r.ttft_ms)}</span><span>Total ${fMs(r.total_request_ms)}</span></div>${[q, p, d].some((v) => !isNum(v)) ? `<p class="note">Only reported segments are drawn; unavailable durations are unknown.</p>` : ""}</section>`;
+      + `<span title="${esc(timingHelp.queue)}"><i style="background:var(--faint)"></i>queue ${isNum(q) ? fMs(q) : "unavailable"}</span>`
+      + `<span title="${esc(timingHelp.prefill)}"><i style="background:var(--warn)"></i>prefill ${isNum(p) ? fMs(p) : "unavailable"}</span>`
+      + `<span title="${esc(timingHelp.decode)}"><i style="background:var(--accent)"></i>decode ${isNum(d) ? fMs(d) : "unavailable"}</span>`
+      + `<span ${helpTitle("TTFT")}>TTFT ${fMs(r.ttft_ms)}</span><span ${helpTitle("Total duration")}>Total ${fMs(r.total_request_ms)}</span></div>${[q, p, d].some((v) => !isNum(v)) ? `<p class="note">Only reported segments are drawn; unavailable durations are unknown.</p>` : ""}</section>`;
   }
   function renderDetail(r) {
     $("detail-id").textContent = `#${r.id}`;
     const acc = isNum(r.draft_tokens) && r.draft_tokens > 0 && isNum(r.draft_tokens_accepted) ? r.draft_tokens_accepted / r.draft_tokens : null;
     const ctx = isNum(r.context_used_pct) && isNum(r.context_length)
-      ? `<div class="ctxbar" role="img" aria-label="Context ${esc(r.context_used_pct)} percent used"><div style="width:${Math.max(0, Math.min(100, r.context_used_pct))}%"></div></div><div class="note">${nf2.format(r.context_used_pct)}% of ${fInt(r.context_length)} context</div>` : "";
+      ? `<div class="ctxbar" role="img" ${helpTitle("Context used")} aria-label="Context ${esc(r.context_used_pct)} percent used"><div style="width:${Math.max(0, Math.min(100, r.context_used_pct))}%"></div></div><div class="note" ${helpTitle("Context used")}>${nf2.format(r.context_used_pct)}% of ${fInt(r.context_length)} context</div>` : "";
     const extra = Object.entries(r.extra_metrics || {}).filter(([k, v]) => /^[a-z][a-z0-9_]*$/.test(k) && (isNum(v) || typeof v === "boolean")).sort(([a], [b]) => a.localeCompare(b));
     const section = (name, rows, suffix = "") => `<section><h3>${name}</h3>${kvRows(rows)}${suffix}</section>`;
     const optional = (name, fields, rows) => fields.some((key) => r[key] !== null && r[key] !== undefined) ? section(name, rows) : "";
     const hitTxt = r.cache_hit === true ? `<span class="badge hit">HIT</span>` : r.cache_hit === false ? `<span class="badge miss">MISS</span>` : DASH;
     $("detail-body").innerHTML = `
-      <div class="status-line"><span class="mono">${esc(r.endpoint)}</span><span>HTTP ${fInt(r.http_status)}</span>
-        ${r.is_streaming ? `<span class="badge">STREAM</span>` : ""}${r.is_vision ? `<span class="badge">VISION ×${esc(r.image_count)}</span>` : ""}
-        <span class="muted">${fDateTime(r.started_at_ms)}</span></div>
+      <div class="status-line"><span class="mono" title="API endpoint used by this request.">${esc(r.endpoint)}</span><span ${helpTitle("HTTP status")}>HTTP ${fInt(r.http_status)}</span>
+        ${r.is_streaming ? `<span class="badge" ${helpTitle("Streaming")}>STREAM</span>` : ""}${r.is_vision ? `<span class="badge" ${helpTitle("Vision / images")}>VISION ×${esc(r.image_count)}</span>` : ""}
+        <span class="muted" title="Time when the proxy received this request.">${fDateTime(r.started_at_ms)}</span></div>
       ${timelineHtml(r)}
       <div class="detail-grid">
         ${section("Identity / status", [
@@ -784,7 +919,7 @@
           ["Queue depth at submit", fInt(r.queue_depth_at_submit)], ["Client queue depth", fInt(r.client_queue_depth_at_submit)],
           ["Resident requests", fInt(r.resident_requests_at_admission)], ["Logical concurrency", fInt(r.requested_logical_concurrency)],
           ["Physical execution width", fInt(r.physical_execution_width)], ["Prefill chunks", fInt(r.prefill_chunks)]])}
-        ${extra.length ? section("Other metrics", extra.map(([k, v]) => [k, typeof v === "boolean" ? String(v) : /bytes$/.test(k) ? fBytes(v) : /_ms$/.test(k) ? fMs(v) : nf2.format(v).replace(/\.00$/, "")])) : ""}
+        ${extra.length ? section("Other metrics", extra.map(([k, v]) => [k, typeof v === "boolean" ? String(v) : /bytes$/.test(k) ? fBytes(v) : /_ms$/.test(k) ? fMs(v) : nf2.format(v).replace(/\.00$/, ""), extraHelp(k, v)])) : ""}
       </div>`;
   }
 

@@ -20,6 +20,12 @@ latest nonzero prefill/decode rate gauges), plus admitted and deferred request
 counts (`requests_processing`, `requests_deferred`). These counts include direct
 traffic and are separate from the dashboard’s own in-flight requests.
 
+Hover over summary cards, chart metric tabs and plotted points, activity fields,
+or metric-table rows to read definitions, units, formulas, and coverage limits.
+Request timing bars and context usage also have explanations. Extra Gufo fields
+use known definitions when available; unknown fields identify their source and
+units without assuming a meaning. A dash means unavailable, not zero.
+
 How figures are computed:
 
 - **Throughput** is weighted: `1000 × Σ tokens / Σ ms` over rows where both
