@@ -168,8 +168,8 @@ def test_completions_stream_now_has_timings() -> None:
 def test_dashboard_assets_revalidate_after_upgrade(dash: Dash) -> None:
     with dash.client() as client:
         index = client.get("/")
-        assert "/static/app.js?v=20261001-cache" in index.text
-        for path in ("/static/app.js?v=20261001-cache", "/static/app.css"):
+        assert "/static/app.js?v=20261002-stat-help" in index.text
+        for path in ("/static/app.js?v=20261002-stat-help", "/static/app.css"):
             response = client.get(path)
             assert response.status_code == 200
             assert response.headers["cache-control"] == "no-cache"

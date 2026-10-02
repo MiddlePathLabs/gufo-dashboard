@@ -20,6 +20,12 @@ latest nonzero prefill/decode rate gauges), plus admitted and deferred request
 counts (`requests_processing`, `requests_deferred`). These counts include direct
 traffic and are separate from the dashboard’s own in-flight requests.
 
+Hover over summary cards, chart metric tabs and plotted points, activity fields,
+or metric-table rows to read definitions, units, formulas, and coverage limits.
+Request timing bars and context usage also have explanations. Extra Gufo fields
+use known definitions when available; unknown fields identify their source and
+units without assuming a meaning. A dash means unavailable, not zero.
+
 How figures are computed:
 
 - **Throughput** is weighted: `1000 × Σ tokens / Σ ms` over rows where both
@@ -79,6 +85,14 @@ the retained log window, not all-time totals. Rotation or the observer’s tail
 limit can shorten that window. Live occupied-slot counts are unavailable; RAM
 byte-limit removals are deliberately suppressed by Gufo and cannot be counted.
 Capacity is a budget, not measured allocation.
+
+The Cache panel separates execution sessions from conversation-cache retention.
+In Gufo 0.5.0, the RAM checkpoint limit is 128 independently of `--sessions`;
+one conversation can retain multiple checkpoints. The panel reads sessions,
+checkpoint limits, and byte budgets from separate observer fields. It shows
+retained RAM and disk checkpoint counts as unavailable because Gufo does not
+report occupancy. The automatic RAM budget has a 32 GiB ceiling, but the actual
+reported budget can be lower due to host and model memory constraints.
 
 The observer reads Docker logs on the host and exports only selected numeric
 fields and fixed event types. The dashboard never receives raw logs or a Docker

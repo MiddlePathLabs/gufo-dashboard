@@ -308,13 +308,16 @@ def test_write_error_counted(tmp_path: Path) -> None:
     assert w.counters.stats_write_errors == 1 and w.counters.stats_written == 1
 
 
-def test_queue_full_does_not_affect_response(dash: Dash) -> None:
+def test_queue_full_does_not_affect_response(dash: Dash, monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = dash.ctx
-    real = ctx.writer.queue
-    full: asyncio.Queue[Any] = asyncio.Queue(maxsize=1)
-    full.put_nowait(object())
-    ctx.writer.queue = full
-    try:
+
+    def reject_job(job: Any) -> None:
+        raise asyncio.QueueFull
+
+    # Exercise the real QueueFull handling without racing the writer consumer
+    # or letting a placeholder item enter its database batch.
+    with monkeypatch.context() as patch:
+        patch.setattr(ctx.writer.queue, "put_nowait", reject_job)
         with dash.client() as c:
             r = c.post(
                 "/v1/chat/completions", json={"model": MODEL, "messages": [], "max_tokens": 16}
@@ -327,8 +330,6 @@ def test_queue_full_does_not_affect_response(dash: Dash) -> None:
         with dash.client() as c:
             status = c.get("/api/status").json()
         assert status["pipeline"]["stats_dropped_queue_full"] == 1
-    finally:
-        ctx.writer.queue = real
 
 
 def test_server_shutdown_drains(dash: Dash) -> None:
