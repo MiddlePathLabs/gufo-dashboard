@@ -1,8 +1,8 @@
 # Gufo Dashboard
 
-A local statistics dashboard and HTTP proxy for Gufo inference servers. Route
-clients through the dashboard to track token usage, throughput, latency, cache
-hits, and speculative decoding over time.
+A local statistics dashboard and HTTP, SSE, and WebSocket proxy for Gufo
+inference servers. Route clients through the dashboard to track token usage,
+throughput, latency, cache hits, and speculative decoding over time.
 
 ![Gufo Dashboard showing live metrics, throughput charts, request activity, and individual timings](docs/images/dashboard-demo.jpg)
 
@@ -13,6 +13,8 @@ identifiers are anonymized; these figures illustrate the interface, not a benchm
 
 - Tracks requests across Chat Completions, Completions, Responses, Messages, and
   Gufo's native `/completion` endpoint.
+- Proxies HTTP responses, SSE streams, and bidirectional WebSocket messages
+  (including text and binary audio).
 - Shows live in-flight requests, recent activity, errors, and individual timings.
 - Optionally captures questions and answers in the selected request’s Content view,
   with separate retention and deletion controls.
@@ -88,6 +90,19 @@ Completions and Completions, it requests usage statistics when needed and remove
 the added usage event before returning the stream. See the
 [forwarding rules](docs/architecture.md#forwarding-rules) for header handling and
 other exceptions.
+
+WebSocket clients can use `ws://localhost:8081` instead of `ws://localhost:8080`
+with the same path, query, credentials, and requested subprotocols. When the
+configured Gufo URL uses HTTPS, the upstream WebSocket connection uses WSS.
+Text and binary messages are relayed without inspecting their contents.
+WebSocket sessions do **not** appear in Activity or request history, and their
+messages are never captured, even when `CAPTURE_CONTENT=true`. HTTP/SSE usage
+statistics still work as described above.
+
+WebSocket message boundaries are preserved, but wire-level fragmentation and
+compression are negotiated independently on each side. The dashboard's
+Uvicorn server defaults to a 16 MiB inbound WebSocket message limit; larger
+client messages require changing the server's WebSocket configuration.
 
 ## Optional question-and-answer audit
 

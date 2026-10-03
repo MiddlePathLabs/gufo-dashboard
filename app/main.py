@@ -21,15 +21,31 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.websockets import WebSocket
 
 from .api import router
 from .config import Settings
 from .db import StatsWriter, connect, init_db
 from .poller import Poller
 from .proxy import KNOWN_ROUTES, InFlightTracker, Proxy
+from .websocket_proxy import WebSocketProxy
 
 log = logging.getLogger("gufo_dashboard")
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+class _UvicornWebSocketLogFilter(logging.Filter):
+    """Keep Uvicorn lifecycle logs, not WebSocket queries, headers, or frames."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno < logging.INFO:
+            return False  # Uvicorn's WebSocket DEBUG records include headers and frames.
+        if record.levelno == logging.INFO:
+            return "/websockets/" not in record.pathname.replace("\\", "/")
+        return True
+
+
+_uvicorn_websocket_log_filter = _UvicornWebSocketLogFilter()
 
 
 @dataclass
@@ -40,6 +56,7 @@ class AppContext:
     inflight: InFlightTracker
     poller: Poller
     proxy: Proxy
+    websocket_proxy: WebSocketProxy
 
 
 def _is_dashboard_path(path: str) -> bool:
@@ -79,6 +96,15 @@ class Dispatcher:
             return False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "websocket":
+            if not self.valid_host(scope):
+                await WebSocket(scope, receive, send).close(code=1008)
+            elif _is_dashboard_path(scope["path"]):
+                await self.dashboard(scope, receive, send)
+            else:
+                websocket_proxy: WebSocketProxy = self.dashboard.state.ctx.websocket_proxy
+                await websocket_proxy(scope, receive, send)
+            return
         if scope["type"] != "http":
             await self.dashboard(scope, receive, send)
             return
@@ -144,12 +170,15 @@ class Dispatcher:
 
 def create_app(settings: Settings | None = None) -> ASGIApp:
     settings = settings or Settings.from_env()
-    # httpx logs full URLs (query strings may carry keys); httpcore logs headers.
-    for name in ("httpx", "httpcore"):
+    # HTTP and WebSocket client loggers can expose URLs, headers, or credentials at DEBUG.
+    for name in ("httpx", "httpcore", "websockets.client"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # WebSocket protocol INFO contains queries; DEBUG can contain headers and frames.
+        # Keep unrelated Uvicorn lifecycle INFO while discarding those records.
+        logging.getLogger("uvicorn.error").addFilter(_uvicorn_websocket_log_filter)
         init_db(settings.database_path)
         client = httpx.AsyncClient(
             timeout=httpx.Timeout(
@@ -193,7 +222,15 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
             capture_content=settings.capture_content,
             content_max_bytes=settings.content_max_bytes,
         )
-        app.state.ctx = AppContext(settings, client, writer, inflight, poller, proxy)
+        app.state.ctx = AppContext(
+            settings,
+            client,
+            writer,
+            inflight,
+            poller,
+            proxy,
+            WebSocketProxy(settings.gufo_base_url, settings.upstream_connect_timeout),
+        )
         writer.start()
         if settings.enable_poller:
             poller.start()
