@@ -14,12 +14,15 @@ flowchart LR
 ```
 
 - The dashboard owns only `/`, `/static/*` and `/api/*`. **Everything else**
-  (any method, including `OPTIONS`) is routed to Gufo. See the forwarding rules below.
+  (any HTTP method, including `OPTIONS`, or WebSocket scope) is routed to Gufo.
+  WebSockets use a separate ASGI relay and an upstream WebSocket client, not the
+  HTTP proxy.
 - Recorded as requests: `POST /v1/chat/completions`, `/v1/completions`,
   `/v1/responses`, `/v1/messages`, `/completion`.
-- Streams are forwarded as they arrive; an SSE parser inspects a side copy.
-- Statistics are inspected alongside forwarding; completed records are queued
-  for a single writer task. Database writes run outside the response path.
+- HTTP streams are forwarded as they arrive; an SSE parser inspects a side copy.
+- Statistics are inspected alongside HTTP forwarding; completed records are queued
+  for a single writer task. WebSocket messages and sessions are not recorded.
+  Database writes run outside the response path.
 
 Opt-in `content.py` captures bounded, allowlisted user and assistant text beside
 extraction. The writer stores it in `request_content` with the matching request

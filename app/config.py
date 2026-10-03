@@ -6,6 +6,7 @@ import math
 import os
 from dataclasses import dataclass
 from typing import overload
+from urllib.parse import urlsplit
 
 
 def _int_env(name: str, default: int) -> int:
@@ -61,6 +62,12 @@ class Settings:
     enable_poller: bool = True
 
     def __post_init__(self) -> None:
+        try:
+            upstream = urlsplit(self.gufo_base_url)
+            if upstream.scheme not in ("http", "https") or not upstream.hostname:
+                raise ValueError
+        except ValueError:
+            raise ValueError("GUFO_BASE_URL must be an http:// or https:// URL") from None
         if not 1 <= self.dashboard_port <= 65535:
             raise ValueError("DASHBOARD_PORT must be between 1 and 65535")
         for name, value in (

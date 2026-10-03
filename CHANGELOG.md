@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Proxy Gufo WebSocket text and binary messages in both directions, forwarding
+  authorization, queries, and subprotocols without capturing message content.
+- Handle WebSocket disconnects without noisy errors, preserve Uvicorn lifecycle
+  logs without logging WebSocket content, and reject non-HTTP(S) upstream URLs.
+
 ## 0.2.1 — 2026-10-02
 
 - Separate execution sessions from conversation-cache limits and budgets in the

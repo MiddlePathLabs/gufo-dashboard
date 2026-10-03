@@ -94,7 +94,7 @@ must be 3.12 or later. CI exercises 3.12, 3.13, and 3.14.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `GUFO_BASE_URL` | `http://127.0.0.1:8080` | Upstream base URL, without `/v1` |
+| `GUFO_BASE_URL` | `http://127.0.0.1:8080` | HTTP(S) upstream base URL, without `/v1`; WebSocket connections derive WS(S) from it |
 | `GUFO_API_KEY` | Empty | Bearer token for the dashboard's own status polls only |
 | `DATABASE_PATH` | `./data/gufo-dashboard.sqlite` | SQLite path; Docker sets `/data/gufo-dashboard.sqlite` |
 | `DASHBOARD_HOST` | `0.0.0.0` | Listen address; use `127.0.0.1` for local-only host-network or Python runs |
