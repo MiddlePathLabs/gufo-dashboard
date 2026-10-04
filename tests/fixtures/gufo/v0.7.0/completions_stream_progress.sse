@@ -1,0 +1,40 @@
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":null}],"prompt_progress":{"total":1,"cache":1,"processed":1,"time_ms":0}}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" Sob","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"at","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" P","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"ustaka","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" Media","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":",","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" kali","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" ini","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" kita","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" akan","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" membahas","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" tentang","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" topik","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" yang","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" menarik","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":" seputar","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":"length"}],"timings":{"prompt_n":0,"prompt_ms":0,"prompt_per_token_ms":0,"prompt_per_second":0,"predicted_n":16,"predicted_ms":1015.454478,"predicted_per_token_ms":63.465904875,"predicted_per_second":15.756491646492105,"cache_n":1,"cache_restore_ms":2.395364,"cache_snapshot_ms":0,"cache_disk_enqueue_ms":0,"draft_rounds":9,"draft_n":35,"draft_n_accepted":5}}
+
+data: {"id":"fixture-response","object":"text_completion","created":1704067200,"model":"fixture-model-a","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":16,"total_tokens":17,"prompt_tokens_details":{"cached_tokens":1},"cached_tokens":1,"prompt_tokens_per_second":0,"completion_tokens_per_second":15.756491646492103,"draft_tokens":35,"draft_tokens_accepted":5}}
+
+data: [DONE]
+

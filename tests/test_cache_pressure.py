@@ -16,6 +16,12 @@ from .conftest import Dash, ServerThread, make_dash
 
 PREFIX = "2026-10-01T12:51:04.353591161Z 2026-10-01 12:51:04 [INFO] [cache] "
 RAM = "event=snapshot_cache_configured sessions=2 snapshot_entries=4 capacity_bytes=14893594624"
+# Gufo 0.7.0 adds the automatic budget an unset --cache-ram-bytes would pick
+# and the maximum an explicit value may reach (free RAM minus 4 GiB).
+RAM_V070 = (
+    "event=snapshot_cache_configured sessions=1 snapshot_entries=128 "
+    "capacity_bytes=34359738368 automatic_bytes=34359738368 max_bytes=92085391360"
+)
 DISK = "event=disk_cache_configured capacity_bytes=8589934592 staging_capacity_bytes=1073741824"
 REMOVE = "event=snapshot action=removed reason=entry_capacity bytes=120588652 tokens=37 retained_bytes=366446316 reserved_bytes=0 capacity_bytes=14893594624"
 LRU = "event=disk_cache action=removed reason=lru file_bytes=100 payload_bytes=90 tokens=37 retained_bytes=800 capacity_bytes=1000 staging_capacity_bytes=50 staging_used_bytes=0"
@@ -28,11 +34,33 @@ def test_cache_capacity_and_observed_events() -> None:
     state = s.state
     assert state["snapshot_entry_limit"] == 4
     assert state["ram_capacity_bytes"] == 14893594624
+    assert state["ram_automatic_bytes"] is None and state["ram_max_bytes"] is None
     assert state["ram_entry_evictions"] == state["disk_lru_evictions"] == 1
     assert state["ram_skipped"] == state["disk_skipped"] == 0
     assert "snapshot_entries_used" not in state  # Gufo does not emit occupancy
     assert state["events"][0]["reason"] == "entry_capacity"
     assert state["events"][1]["reason"] == "lru"
+
+
+def test_gufo_v070_automatic_and_max_budgets() -> None:
+    s = CacheLogSummary("0.7.0", "info")
+    s.feed(PREFIX + RAM_V070)
+    assert s.state["schema"] == 2
+    assert s.state["ram_capacity_bytes"] == 34359738368
+    assert s.state["ram_automatic_bytes"] == 34359738368
+    assert s.state["ram_max_bytes"] == 92085391360
+
+
+def test_reader_accepts_schema_1_state_files(tmp_path: Path) -> None:
+    p = tmp_path / "state.json"
+    write_state(p, 1000)
+    raw = json.loads(p.read_text())
+    raw["schema"] = 1
+    p.write_text(json.dumps(raw))
+    state = read_cache_pressure(str(p), 2000)
+    assert state["available"]
+    assert state["ram_automatic_bytes"] is None and state["ram_max_bytes"] is None
+    assert state["ram_capacity_bytes"] == 14893594624
 
 
 def test_events_bounded_and_no_raw_logs() -> None:

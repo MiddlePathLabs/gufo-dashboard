@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Verify Gufo 0.7.0 compatibility: the consumed `llamacpp:*` series and
+  HELP-line units are unchanged, and versioned 0.7.0 captures extend the
+  counter reconciliation to the new cached-prompt counter.
+- Parse Gufo 0.7.0's automatic and maximum RAM cache budgets in the cache
+  observer (state schema 2; schema-1 snapshots remain readable) and show them
+  in the Cache panel, which now explains that an explicit `--cache-ram-bytes`
+  may exceed the automatic budget.
+- Record speculative verification rounds (`draft_rounds`) from terminal
+  `timings` for endpoints without a `usage.gufo` block.
+- Recommend Gufo 0.5.0 or later in documentation; 0.4.0 is flagged "DO NOT
+  USE" upstream.
 - Proxy Gufo WebSocket text and binary messages in both directions, forwarding
   authorization, queries, and subprotocols without capturing message content.
 - Handle WebSocket disconnects without noisy errors, preserve Uvicorn lifecycle
