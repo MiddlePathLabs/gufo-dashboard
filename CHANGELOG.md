@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-04
 
 - Verify Gufo 0.7.0 compatibility: the consumed `llamacpp:*` series and
   HELP-line units are unchanged, and versioned 0.7.0 captures extend the
