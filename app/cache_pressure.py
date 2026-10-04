@@ -15,6 +15,8 @@ STALE_MS = 30_000
 _FIELDS = re.compile(r"(?:^|\s)([a-z_]+)=([A-Za-z0-9_.-]+)(?=\s|$)")
 NUMBERS = (
     "ram_capacity_bytes",
+    "ram_automatic_bytes",
+    "ram_max_bytes",
     "snapshot_entry_limit",
     "sessions",
     "disk_capacity_bytes",
@@ -53,7 +55,7 @@ class CacheLogSummary:
     def __init__(self, version: str | None, level: str | None) -> None:
         self.state: dict[str, Any] = dict.fromkeys(NUMBERS)
         self.state.update(
-            schema=1,
+            schema=2,
             gufo_version=as_str(version),
             log_level=level,
             ram_configured=False,
@@ -94,6 +96,10 @@ class CacheLogSummary:
             s.update(
                 ram_configured=True,
                 ram_capacity_bytes=number("capacity_bytes"),
+                # Gufo 0.7 also emits the automatic budget an unset
+                # --cache-ram-bytes would pick and the explicit-limit maximum.
+                ram_automatic_bytes=number("automatic_bytes"),
+                ram_max_bytes=number("max_bytes"),
                 snapshot_entry_limit=number("snapshot_entries"),
                 sessions=number("sessions"),
             )
@@ -148,7 +154,9 @@ def read_cache_pressure(path: str, now: int) -> dict[str, Any]:
         if len(raw) > MAX_STATE_BYTES:
             raise ValueError
         obj = json.loads(raw)
-        if not isinstance(obj, dict) or obj.get("schema") != 1:
+        # Schema 1 predates Gufo 0.7's automatic/max RAM budget fields; both
+        # remain readable so an upgrade cannot blank the panel for a tick.
+        if not isinstance(obj, dict) or obj.get("schema") not in (1, 2):
             raise ValueError
     except (OSError, ValueError, RecursionError):
         return {"available": False, "status": "unavailable"}

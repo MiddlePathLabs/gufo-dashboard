@@ -507,7 +507,9 @@
     if (!p?.available) return heading + '<p class="note">Cache diagnostics unavailable' + (p?.status === "stale" ? " (observer stale)." : ".") + '</p>';
     const bytes = (n) => isNum(n) ? `${(n / (1024 ** 3)).toFixed(2)} GiB` : DASH;
     const rows = [
-      ["RAM cache budget", bytes(p.ram_capacity_bytes), "Maximum bytes allowed for RAM snapshots and captures in progress, not current usage or total server memory. Gufo 0.5 defaults to an automatic ceiling of 32 GiB, reduced by host and model memory limits."],
+      ["RAM cache budget", bytes(p.ram_capacity_bytes), "Configured RAM snapshot byte budget, not current usage or total server memory. Without --cache-ram-bytes it equals the automatic budget; Gufo 0.7.0 lets an explicit --cache-ram-bytes exceed the automatic budget."],
+      ["Automatic RAM budget", bytes(p.ram_automatic_bytes), "The RAM budget Gufo sizes on its own: half of free RAM, at most 32 GiB. An explicit --cache-ram-bytes may exceed it, up to the maximum budget. Unavailable on state files from older observers."],
+      ["Maximum RAM budget", bytes(p.ram_max_bytes), "The largest explicit --cache-ram-bytes Gufo 0.7.0 accepts: free RAM minus 4 GiB. Unavailable on state files from older observers."],
       ["RAM checkpoint limit", fInt(p.snapshot_entry_limit), "Maximum retained RAM checkpoint records. Gufo 0.5 allows 128 independently of execution sessions. One conversation can use several records; the byte budget can fill first."],
       ["Retained RAM checkpoints", "Unavailable", "Gufo does not report the current number of retained RAM checkpoints. The checkpoint limit is capacity, not occupancy."],
       ["Observed RAM entry evictions", fInt(p.ram_entry_evictions), "Checkpoint removals reported because the RAM entry limit was reached, counted within retained logs. RAM byte-budget removals are not logged and are excluded."],

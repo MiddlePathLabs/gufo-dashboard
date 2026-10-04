@@ -265,6 +265,12 @@ def normalize_usage(usage: Any, timings: Any, *, reasoning: bool = False) -> dic
             extra[key] = value
         elif (n := _num(value)) is not None:
             extra[key] = n
+    # Gufo 0.7 reports speculative verification rounds in timings even for
+    # endpoints without a usage.gufo block; surface them like the other extras.
+    if (rounds := as_int(t.get("draft_rounds"))) is not None and (
+        "draft_rounds" in extra or len(extra) < MAX_EXTRA_KEYS
+    ):
+        extra.setdefault("draft_rounds", rounds)
     if extra:
         r["extra_metrics"] = extra
     return {k: v for k, v in r.items() if v is not None}

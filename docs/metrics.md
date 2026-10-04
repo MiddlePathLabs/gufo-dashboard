@@ -1,7 +1,7 @@
 # Metrics and compatibility
 
-Endpoint behavior below describes Gufo 0.4.0, verified against the loaded server
-and checked-in, anonymized captures at engine commit `6aa87fc`. Older captures
+Endpoint behavior below describes Gufo 0.7.0, verified against the loaded server
+and checked-in, anonymized captures at engine commit `aedc129f`. Older captures
 remain available to check backward compatibility.
 It is not a guarantee for every Gufo release. See the
 [fixture notes](../tests/fixtures/gufo/README.md) for capture details.
@@ -47,15 +47,19 @@ How figures are computed:
 - Gufo reports no uptime; the dashboard shows **observed ready duration**
   (since it first saw Gufo ready after the last down / counter reset).
 - `/v1/messages` and `/completion` do not stream in Gufo.
-- KV usage (`kv_cache_usage_ratio`) and `/slots` are placeholders in Gufo and
-  are ignored.
+- KV usage (`kv_cache_usage_ratio`) and `/slots` are ignored. Both became
+  meaningful in Gufo 0.7.0 (in-flight token ratio; live session reports), but
+  the dashboard does not consume them. Gufo 0.7.0 also adds
+  `prompt_tokens_cached_total`, process-time totals, `n_tokens_max`, and
+  spec-decode round counters; they are recorded in the versioned captures and
+  not yet consumed.
 - `range=all` counts, token totals, weighted rates, cache hit rate and
   acceptance come from the daily rollup and are truly all-time; **percentiles,
   miss-reason breakdowns and the request list only cover retained raw rows**
   (labelled "last N d").
 - Traffic sent to `:8080` directly contributes to **unattributed tokens**
-  (a reset-aware `/metrics` delta minus recorded work). Gufo 0.4.0 counts
-  executed prefill tokens, excluding cache hits; the dashboard subtracts
+  (a reset-aware `/metrics` delta minus recorded work). Gufo 0.4.0 and later
+  count executed prefill tokens, excluding cache hits; the dashboard subtracts
   `prefill_tokens`, falling back to `prompt_tokens - cached_tokens` when both
   are known. Older servers count full prompt tokens. The metrics HELP line
   selects the units; changing units starts a new baseline. The estimate stays
@@ -77,7 +81,7 @@ pass through unchanged and do not start the first-token timer. Streaming
 Completions now include terminal `timings`, enabling prefill and draft metrics
 even when those values are absent from the usage event.
 
-Gufo 0.4.0 reports cache diagnostics in server logs rather than HTTP metrics.
+Gufo reports cache diagnostics in server logs rather than HTTP metrics.
 The optional [host cache observer](deployment.md#cache-pressure-observer) makes
 capacity budgets, observed RAM entry-limit evictions, disk LRU evictions, skipped
 captures, and recent event timestamps available in the Cache panel. Counts cover
@@ -91,8 +95,11 @@ In Gufo 0.5.0, the RAM checkpoint limit is 128 independently of `--sessions`;
 one conversation can retain multiple checkpoints. The panel reads sessions,
 checkpoint limits, and byte budgets from separate observer fields. It shows
 retained RAM and disk checkpoint counts as unavailable because Gufo does not
-report occupancy. The automatic RAM budget has a 32 GiB ceiling, but the actual
-reported budget can be lower due to host and model memory constraints.
+report occupancy. The automatic RAM budget is half of free RAM with a 32 GiB
+ceiling; since Gufo 0.7.0 an explicit `--cache-ram-bytes` may exceed that
+automatic budget, up to available RAM minus 4 GiB. Automatic sizing is
+unchanged, and the observer reports the automatic and maximum budgets so the
+configured budget can be compared against both.
 
 The observer reads Docker logs on the host and exports only selected numeric
 fields and fixed event types. The dashboard never receives raw logs or a Docker

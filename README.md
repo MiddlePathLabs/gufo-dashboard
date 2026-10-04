@@ -41,7 +41,9 @@ local-only access.
 ## Quick start
 
 You need a running Gufo server. Its default upstream address is
-`http://127.0.0.1:8080`. The dashboard uses port `8081`.
+`http://127.0.0.1:8080`. The dashboard uses port `8081`. Gufo 0.5.0 or later
+is recommended and 0.7.0 is the verified version; 0.4.0 is flagged "DO NOT
+USE" upstream (tool-calling regression, fixed in 0.5.0).
 
 ### Docker Compose on Linux
 

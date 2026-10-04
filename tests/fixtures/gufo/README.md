@@ -56,3 +56,10 @@ recapturing is required to establish their replacement's build provenance.
 The [versioned captures](v0.4.0/README.md) add verified build provenance,
 prefill-only live counters, Completions terminal timings, and prompt-progress
 streams. The parent fixtures retain the older full-prompt counter behavior.
+
+## Gufo 0.7.0
+
+The [versioned captures](v0.7.0/README.md) add the cached-prompt counter and
+new `llamacpp:*` series, model input modalities, prefix-sharing usage keys,
+`timings.draft_rounds`, and Messages thinking blocks, with unchanged consumed
+series and HELP-line units.

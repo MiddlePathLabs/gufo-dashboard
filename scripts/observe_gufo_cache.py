@@ -88,7 +88,7 @@ def main() -> None:
     try:
         state = observe(args.container, args.tail)
     except (OSError, ValueError, subprocess.SubprocessError):
-        state = {"schema": 1, "observer_ok": False, "updated_at_ms": int(time.time() * 1000)}
+        state = {"schema": 2, "observer_ok": False, "updated_at_ms": int(time.time() * 1000)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".gufo-cache-", dir=args.output.parent)
     try:

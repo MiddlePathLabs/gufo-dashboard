@@ -165,7 +165,7 @@ suppressed. New requests can add both metadata and text afterward.
 The API is part of the current `0.1.x` application and has no versioned stability
 contract. Response implementations live in `app/api.py` and `app/stats.py`.
 
-## Gufo 0.4.0 status fields
+## Gufo 0.4+ status fields
 
 `GET /api/status` adds `upstream_requests.processing` and
 `upstream_requests.deferred`. These are Gufo-wide admitted and queued request
@@ -176,7 +176,7 @@ state return null. `in_flight` still counts only dashboard-proxied requests.
 and the unattributed prompt estimate. It is true when Gufo’s metrics HELP line
 announces that cache hits are excluded. The dashboard then subtracts recorded
 prefill work rather than full prompt totals. `recorded_prompt_tokens` in the
-unattributed response uses those same units. Gufo 0.4.0’s token counters update
+unattributed response uses those same units. Gufo 0.4.0 and later update
 during generation; its speed gauges retain the latest nonzero request rates.
 
 
@@ -186,7 +186,8 @@ the API, `deferred` means requests waiting for a Gufo session; it is separate
 from the proxy’s in-flight count and statistics-writer queue.
 
 `cache_pressure` contains the optional host observer’s snapshot: `available`,
-`status`, `gufo_version` (runtime image version), `log_level`, capacity budgets,
+`status`, `gufo_version` (runtime image version), `log_level`, capacity budgets
+(plus the automatic and maximum RAM budgets on Gufo 0.7.0+ state files),
 `sessions` (execution sessions), `snapshot_entry_limit` (RAM checkpoint limit),
 observed eviction/skip counts, a bounded `events` list,
 and observation/window timestamps. `capabilities.cache_pressure` is true only
