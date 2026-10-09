@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-10-09
 
 - Record usage, stop reason, and first-token timing for streamed `/v1/messages`
   (Gufo 0.10.0): the full `usage` and `stop_reason` arrive on the

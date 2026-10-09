@@ -1,6 +1,6 @@
 [project]
 name = "gufo-dashboard"
-version = "0.3.0"
+version = "0.4.0"
 description = "Transparent OpenAI-compatible proxy + stats dashboard for a local Gufo inference server"
 readme = "README.md"
 license = "MIT"
