@@ -202,7 +202,7 @@ answers. Retention and deletion in the running app do not alter older backups.
 Before upgrading, make a backup, review dependency and schema changes, then
 rebuild the image or sync the locked Python environment. Run one application
 process per database. Gufo 0.4.0 is flagged "DO NOT USE" upstream because of a
-tool-calling regression fixed in 0.5.0; run Gufo 0.5.0 or later (0.7.0 is the
+tool-calling regression fixed in 0.5.0; run Gufo 0.5.0 or later (0.10.0 is the
 verified version). On startup, schema version 2 adds the content table to
 version-1 databases while preserving existing statistics. No previous transcript
 text is reconstructed. Startup rejects unsupported schema versions or missing
@@ -235,7 +235,7 @@ for deletion limits.
 
 This optional Linux/Docker feature reads structured Gufo cache logs on the
 host and writes a small numeric snapshot for the Cache panel, verified against
-Gufo 0.4.0 through 0.7.0. It does not mount the Docker socket or raw logs into
+Gufo 0.4.0 through 0.10.0. It does not mount the Docker socket or raw logs into
 the dashboard. Existing HTTP metrics need no log access. Choose the same Gufo
 instance that `GUFO_BASE_URL` points to.
 

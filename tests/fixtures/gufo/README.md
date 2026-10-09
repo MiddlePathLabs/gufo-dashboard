@@ -63,3 +63,10 @@ The [versioned captures](v0.7.0/README.md) add the cached-prompt counter and
 new `llamacpp:*` series, model input modalities, prefix-sharing usage keys,
 `timings.draft_rounds`, and Messages thinking blocks, with unchanged consumed
 series and HELP-line units.
+
+## Gufo 0.10.0
+
+The [versioned captures](v0.10.0/README.md) add streamed `/v1/messages`
+(full usage and stop reason on the `message_delta` event; tool arguments as
+`input_json_delta`) and Messages tool calls, with unchanged consumed series
+and HELP-line units.
