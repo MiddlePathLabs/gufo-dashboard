@@ -153,6 +153,27 @@ def main() -> None:
     # Keep these outside the before/after metrics window used by the fixture tests.
     req("completions_nonstream", "POST", "/v1/completions", completion)
     req("native_completion_nonstream", "POST", "/completion", native)
+    # Gufo 0.10 adds tools on /v1/messages; forced tool_choice guarantees a
+    # tool_use block on any model. Also outside the metrics window.
+    messages_tools = {
+        "model": model,
+        "max_tokens": 64,
+        "tools": [
+            {
+                "name": "get_weather",
+                "description": "Weather for a city",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
+            }
+        ],
+        "tool_choice": {"type": "tool", "name": "get_weather"},
+        "messages": [{"role": "user", "content": "What is the weather in Rome?"}],
+    }
+    req("messages_tools_nonstream", "POST", "/v1/messages", messages_tools)
+    req("messages_tools_stream", "POST", "/v1/messages", {**messages_tools, "stream": True})
 
 
 if __name__ == "__main__":

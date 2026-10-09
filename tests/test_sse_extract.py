@@ -340,6 +340,71 @@ def test_responses_first_token_reasoning_summary() -> None:
     assert ins.fields["finish_reason"] == "incomplete:max_output_tokens"
 
 
+def _messages_stream_body() -> bytes:
+    events = [
+        {"type": "message_start", "message": {"usage": {"input_tokens": 0, "output_tokens": 0}}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": ""}},
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "OK"}},
+        {"type": "content_block_stop", "index": 0},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"input_tokens": 14, "output_tokens": 2, "cache_read_input_tokens": 7},
+        },
+        {"type": "message_stop"},
+    ]
+    return b"".join(
+        b"data: " + json.dumps(e, separators=(",", ":")).encode() + b"\n\n" for e in events
+    )
+
+
+def test_messages_stream_usage_and_first_token() -> None:
+    # Gufo 0.10 streams /v1/messages; usage rides the message_delta event and
+    # input_tokens includes cached tokens (cache_read is a subset, like chat).
+    ins, drops, firsts = _inspect("messages", _messages_stream_body(), False)
+    assert firsts.count(True) == 1  # the empty text_delta is not a token
+    assert not any(drops)
+    assert ins.fields["prompt_tokens"] == 14
+    assert ins.fields["cached_tokens"] == 7
+    assert ins.fields["completion_tokens"] == 2
+    assert ins.fields["finish_reason"] == "end_turn"
+
+
+def test_messages_stream_thinking_is_token_tool_json_is_not() -> None:
+    events = [
+        {"type": "content_block_delta", "delta": {"type": "thinking_delta", "thinking": "hm"}},
+        {
+            "type": "content_block_delta",
+            "delta": {"type": "input_json_delta", "partial_json": "{}"},
+        },
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "tool_use"},
+            "usage": {"input_tokens": 9, "output_tokens": 3},
+        },
+    ]
+    body = b"".join(
+        b"data: " + json.dumps(e, separators=(",", ":")).encode() + b"\n\n" for e in events
+    )
+    ins, _, firsts = _inspect("messages", body, False)
+    assert firsts == [True, False, False]
+    assert ins.fields["finish_reason"] == "tool_use"
+
+
+def test_messages_stream_error_event_zero_usage_start_ignored() -> None:
+    events = [
+        {"type": "message_start", "message": {"usage": {"input_tokens": 0, "output_tokens": 0}}},
+        {"type": "error", "error": {"type": "api_error", "message": "boom"}},
+    ]
+    body = b"".join(
+        b"data: " + json.dumps(e, separators=(",", ":")).encode() + b"\n\n" for e in events
+    )
+    ins, drops, firsts = _inspect("messages", body, False)
+    assert ins.fields == {"error_code": "api_error"}
+    assert firsts == [False, False] and not any(drops)
+
+
 def test_malformed_events_ignored() -> None:
     good = fixture_bytes("chat_stream_include_usage")
     body = b'data: {broken\n\nevent: weird\ndata: {"type":"unknown"}\n\ndata: 12\n\n' + good

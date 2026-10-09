@@ -1,7 +1,7 @@
 # Metrics and compatibility
 
-Endpoint behavior below describes Gufo 0.7.0, verified against the loaded server
-and checked-in, anonymized captures at engine commit `aedc129f`. Older captures
+Endpoint behavior below describes Gufo 0.10.0, verified against the loaded server
+and checked-in, anonymized captures at engine commit `3020d24`. Older captures
 remain available to check backward compatibility.
 It is not a guarantee for every Gufo release. See the
 [fixture notes](../tests/fixtures/gufo/README.md) for capture details.
@@ -11,7 +11,7 @@ It is not a guarantee for every Gufo release. See the
 | `/v1/chat/completions` | yes | non-stream: `usage` + `timings`; stream: finish chunk has `timings`; the `include_usage` event has full `usage` + `timings` | **yes** (non-stream, or stream with usage) |
 | `/v1/completions` | yes | `usage`; `timings` in non-stream bodies and streaming terminal chunks | no |
 | `/v1/responses` | yes | `usage` (incl. `reasoning_tokens`) + `timings` in the body or the `response.completed/incomplete/failed` event | no |
-| `/v1/messages` | **no** (`'stream' must be false`) | Anthropic `usage` (`input_tokens`, `output_tokens`, `cache_read_input_tokens`) + `timings` | no |
+| `/v1/messages` | yes (since Gufo 0.10.0) | Anthropic `usage` (`input_tokens` includes cached tokens, `output_tokens`, `cache_read_input_tokens`) + `timings`; stream: the `message_delta` event carries the full `usage` and `stop_reason` | no |
 | `/completion` | **no** | `usage` + `timings` + llama.cpp `stopped_*` flags | no |
 
 Also polled: `/ready` (online + model), `/v1/models` (`context_length`),
@@ -46,7 +46,10 @@ How figures are computed:
   or scheduler fields for those endpoints.
 - Gufo reports no uptime; the dashboard shows **observed ready duration**
   (since it first saw Gufo ready after the last down / counter reset).
-- `/v1/messages` and `/completion` do not stream in Gufo.
+- `/completion` does not stream in Gufo. `/v1/messages` streams since
+  0.10.0: token text arrives as `text_delta`/`thinking_delta` events (either
+  counts as the first token) and tool arguments as `input_json_delta`, which
+  is not counted as a token.
 - KV usage (`kv_cache_usage_ratio`) and `/slots` are ignored. Both became
   meaningful in Gufo 0.7.0 (in-flight token ratio; live session reports), but
   the dashboard does not consume them. Gufo 0.7.0 also adds

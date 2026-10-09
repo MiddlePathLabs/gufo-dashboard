@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Record usage, stop reason, and first-token timing for streamed `/v1/messages`
+  (Gufo 0.10.0): the full `usage` and `stop_reason` arrive on the
+  `message_delta` event; `text_delta`/`thinking_delta` count as the first token
+  while `input_json_delta` tool arguments do not. `input_tokens` includes
+  cached tokens, matching chat `prompt_tokens`.
+- Verify Gufo 0.10.0 compatibility: the consumed `llamacpp:*` series and
+  HELP-line units are unchanged, and versioned 0.10.0 captures extend the
+  counter reconciliation to the now-streaming Messages endpoint (98 executed +
+  98 cached = 196 full prompt tokens over ten requests).
+
 ## 0.3.0 — 2026-10-04
 
 - Verify Gufo 0.7.0 compatibility: the consumed `llamacpp:*` series and

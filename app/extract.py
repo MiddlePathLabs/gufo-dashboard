@@ -438,6 +438,31 @@ class StreamInspector:
                 merge(self.fields, extract_responses(obj.get("response")))
             elif etype == "error" and (code := as_str(obj.get("code"))):
                 self.fields["error_code"] = code
+        elif self.kind == "messages":
+            # Gufo 0.10 streams Anthropic events: full usage and stop_reason
+            # arrive on message_delta; tokens as text_delta / thinking_delta
+            # (input_json_delta carries tool arguments, which are not tokens).
+            etype = obj.get("type")
+            delta = _dict(obj.get("delta"))
+            dtype = delta.get("type")
+            if etype == "message_delta":
+                merge(
+                    self.fields,
+                    extract_messages(
+                        {"usage": obj.get("usage"), "stop_reason": delta.get("stop_reason")}
+                    ),
+                )
+            elif etype == "error" and (code := extract_error_code(obj)):
+                self.fields["error_code"] = code
+            if (
+                not self.first_token_seen
+                and etype == "content_block_delta"
+                and dtype in ("text_delta", "thinking_delta")
+                and _nonempty_str(
+                    delta.get("text") if dtype == "text_delta" else delta.get("thinking")
+                )
+            ):
+                first = True
         if first:
             self.first_token_seen = True
             self.prompt_progress = None
