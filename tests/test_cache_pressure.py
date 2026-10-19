@@ -159,9 +159,7 @@ def test_status_cache_capabilities(tmp_path: Path, fake_server: ServerThread) ->
         d.server.stop()
 
 
-def test_status_gufo_version_without_observer(
-    tmp_path: Path, fake_server: ServerThread
-) -> None:
+def test_status_gufo_version_without_observer(tmp_path: Path, fake_server: ServerThread) -> None:
     d: Dash = make_dash(tmp_path, fake_server.url)
     try:
         with d.client() as client:
