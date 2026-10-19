@@ -1,0 +1,38 @@
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":",","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" what","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" the","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" best","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" way","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" to","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" make","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" a","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" million","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" dollars","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" in","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" ","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":"1","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":" year","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":"\n\n","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":"<think>","index":0,"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[{"text":"","index":0,"logprobs":null,"finish_reason":"length"}],"timings":{"prompt_n":1,"prompt_ms":65.293933,"prompt_per_token_ms":65.293933,"prompt_per_second":15.3153586260457,"predicted_n":16,"predicted_ms":345.387603,"predicted_per_token_ms":21.5867251875,"predicted_per_second":46.324766323474556,"cache_n":0,"cache_restore_ms":0,"cache_snapshot_ms":3.224596,"cache_disk_enqueue_ms":0.125766,"draft_rounds":6,"draft_n":14,"draft_n_accepted":9,"component_cache":{"schema":"component-cache-v1","reuse":"none","selection_reason":6,"deepest_live_tokens":0,"deepest_ram_tokens":0,"deepest_disk_tokens":0,"selected_tokens":0,"restored_bytes":0,"prefilled_tokens":1,"captures":1,"captured_capacity_bytes":135135232,"borrowed_capacity_bytes":0,"copied_payload_bytes":133056676,"captured_checkpoint_ids":[17149],"global_spill":{"idle_bytes":0,"foreground_bytes":0,"idle_copy_ms":0,"foreground_copy_ms":0,"stream_wait_ms":0,"residual_wait_ms":8.275038,"reassignments":9,"idle_failures":0},"global_ledger_bytes":2652678008,"global_ram_bytes":2651629432,"global_peak_ledger_bytes":2660365735,"global_peak_ram_bytes":2659317159,"global_persistence_pinned_bytes":135135232,"global_peak_persistence_pinned_bytes":270532608,"global_categories":{"backing_free":{"bytes":1057685504,"reserved_bytes":0,"peak_bytes":2278359040},"backing_assigned":{"bytes":0,"reserved_bytes":0,"peak_bytes":0},"backing_materialized":{"bytes":0,"reserved_bytes":0,"peak_bytes":0},"private_state":{"bytes":1201471488,"reserved_bytes":0,"peak_bytes":1201471488},"private_tail":{"bytes":19202048,"reserved_bytes":0,"peak_bytes":19202048},"metadata":{"bytes":373270392,"reserved_bytes":0,"peak_bytes":380958119},"transfer_staging":{"bytes":1048576,"reserved_bytes":0,"peak_bytes":1048576}},"global_persistence":{"accepted_jobs":5,"coalesced_jobs":0,"superseded_jobs":0,"skipped_jobs":0,"published_jobs":4,"failed_jobs":0,"pending_jobs":1,"peak_pending_jobs":2,"pinned_source_capacity_bytes":135135232,"peak_pinned_source_capacity_bytes":270532608,"transferred_bytes":538431028,"yield_ms":1458.187853,"filesystem_ms":65.306963,"fsync_ms":382.130971,"checksum_ms":28.369413}}}}
+
+data: {"id":"fixture-response","object":"text_completion","created":1792416330,"model":"fixture-model-a","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":16,"total_tokens":17,"prompt_tokens_details":{"cached_tokens":0},"cached_tokens":0,"prompt_tokens_per_second":15.3153586260457,"completion_tokens_per_second":46.324766323474556,"draft_tokens":14,"draft_tokens_accepted":9}}
+
+data: [DONE]
+

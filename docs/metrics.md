@@ -1,7 +1,7 @@
 # Metrics and compatibility
 
-Endpoint behavior below describes Gufo 0.10.0, verified against the loaded server
-and checked-in, anonymized captures at engine commit `3020d24`. Older captures
+Endpoint behavior below describes Gufo 0.18.0, verified against the loaded server
+and checked-in, anonymized captures at engine commit `6c682a2`. Older captures
 remain available to check backward compatibility.
 It is not a guarantee for every Gufo release. See the
 [fixture notes](../tests/fixtures/gufo/README.md) for capture details.
@@ -11,7 +11,7 @@ It is not a guarantee for every Gufo release. See the
 | `/v1/chat/completions` | yes | non-stream: `usage` + `timings`; stream: finish chunk has `timings`; the `include_usage` event has full `usage` + `timings` | **yes** (non-stream, or stream with usage) |
 | `/v1/completions` | yes | `usage`; `timings` in non-stream bodies and streaming terminal chunks | no |
 | `/v1/responses` | yes | `usage` (incl. `reasoning_tokens`) + `timings` in the body or the `response.completed/incomplete/failed` event | no |
-| `/v1/messages` | yes (since Gufo 0.10.0) | Anthropic `usage` (`input_tokens` includes cached tokens, `output_tokens`, `cache_read_input_tokens`) + `timings`; stream: the `message_delta` event carries the full `usage` and `stop_reason` | no |
+| `/v1/messages` | yes (since Gufo 0.10.0) | Anthropic `usage` + `timings`; stream: the `message_delta` event carries the full `usage` and `stop_reason`. Since Gufo 0.12.0 `input_tokens` excludes cache reads; the recorder stores the full prompt (`input_tokens + cache_read_input_tokens`) | no |
 | `/completion` | **no** | `usage` + `timings` + llama.cpp `stopped_*` flags | no |
 
 Also polled: `/ready` (online + model), `/v1/models` (`context_length`),
@@ -55,7 +55,9 @@ How figures are computed:
   the dashboard does not consume them. Gufo 0.7.0 also adds
   `prompt_tokens_cached_total`, process-time totals, `n_tokens_max`, and
   spec-decode round counters; they are recorded in the versioned captures and
-  not yet consumed.
+  not yet consumed. Gufo 0.17 adds the prompt-lookup counters
+  (`gufo_spec_lookup_tokens_total`, `gufo_spec_lookup_accepted_tokens_total`),
+  also unconsumed.
 - `range=all` counts, token totals, weighted rates, cache hit rate and
   acceptance come from the daily rollup and are truly all-time; **percentiles,
   miss-reason breakdowns and the request list only cover retained raw rows**

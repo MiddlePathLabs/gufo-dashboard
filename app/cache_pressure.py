@@ -21,6 +21,8 @@ NUMBERS = (
     "sessions",
     "disk_capacity_bytes",
     "disk_staging_capacity_bytes",
+    "backing_committed_bytes",
+    "backing_pinned_bytes",
     "ram_entry_evictions",
     "disk_lru_evictions",
     "ram_skipped",
@@ -60,6 +62,7 @@ class CacheLogSummary:
             log_level=level,
             ram_configured=False,
             disk_configured=False,
+            config_source=None,
             events=[],
         )
         self.level = level
@@ -79,12 +82,14 @@ class CacheLogSummary:
             return
         fields = dict(_FIELDS.findall(line))
         event = fields.get("event")
+        schema = fields.get("schema")
+        component = schema == "component-cache-v1"
         if event not in {
             "snapshot_cache_configured",
             "disk_cache_configured",
             "snapshot",
             "disk_cache",
-        }:
+        } and not (component and event in {"configured", "backing_prepared"}):
             return
 
         def number(key: str) -> int | None:
@@ -92,6 +97,32 @@ class CacheLogSummary:
             return as_int(int(value)) if value.isdecimal() and len(value) <= 19 else None
 
         s = self.state
+        if component and event == "configured":
+            # Gufo 0.13+ replaces the two startup events with one merged
+            # component-cache-v1 line covering both tiers.
+            s.update(
+                ram_configured=True,
+                ram_capacity_bytes=number("capacity_bytes"),
+                ram_automatic_bytes=number("automatic_bytes"),
+                ram_max_bytes=number("max_bytes"),
+                snapshot_entry_limit=number("snapshot_entries"),
+                sessions=number("sessions"),
+                disk_configured=True,
+                disk_capacity_bytes=number("disk_capacity_bytes"),
+                disk_staging_capacity_bytes=number("staging_capacity_bytes"),
+                config_source="window",
+            )
+            s["ram_entry_evictions"] = 0 if self.level in {"info", "debug", "warn"} else None
+            s["ram_skipped"] = 0 if self.level in {"info", "debug", "warn"} else None
+            s["disk_lru_evictions"] = 0 if self.level in {"info", "debug"} else None
+            s["disk_skipped"] = 0 if self.level in {"info", "debug", "warn"} else None
+            return
+        if component and event == "backing_prepared":
+            s.update(
+                backing_committed_bytes=number("committed_bytes"),
+                backing_pinned_bytes=number("long_term_pinned_bytes"),
+            )
+            return
         if event == "snapshot_cache_configured":
             s.update(
                 ram_configured=True,
@@ -144,6 +175,42 @@ class CacheLogSummary:
         s["events"] = s["events"][-20:]
 
 
+_CARRIED_FIELDS = (
+    "ram_configured",
+    "disk_configured",
+    "ram_capacity_bytes",
+    "ram_automatic_bytes",
+    "ram_max_bytes",
+    "snapshot_entry_limit",
+    "sessions",
+    "disk_capacity_bytes",
+    "disk_staging_capacity_bytes",
+    "backing_committed_bytes",
+    "backing_pinned_bytes",
+)
+
+
+def carry_forward_config(state: dict[str, Any], previous: Any) -> None:
+    """Reuse the previous snapshot's config when startup events scrolled out.
+
+    The config startup lines exist once per container; once request logs push
+    them past the observer's tail window, event counts stay current but the
+    capacities would blank. Reuse them from the previous snapshot while the
+    Gufo version is unchanged, so a container swap cannot stitch configs.
+    """
+    if state.get("ram_configured") or state.get("disk_configured"):
+        return
+    if not isinstance(previous, dict) or previous.get("gufo_version") != state.get("gufo_version"):
+        return
+    if not previous.get("ram_configured") and not previous.get("disk_configured"):
+        return
+    for key in _CARRIED_FIELDS:
+        value = previous.get(key)
+        if value is not None:
+            state[key] = value
+    state["config_source"] = "carried"
+
+
 def read_cache_pressure(path: str, now: int) -> dict[str, Any]:
     result: dict[str, Any] = {"available": False, "status": "not_configured"}
     if not path:
@@ -173,6 +240,9 @@ def read_cache_pressure(path: str, now: int) -> dict[str, Any]:
         else None,
         ram_configured=obj.get("ram_configured") is True,
         disk_configured=obj.get("disk_configured") is True,
+        config_source=obj.get("config_source")
+        if obj.get("config_source") in ("window", "carried")
+        else None,
         events=[],
     )
     events = obj.get("events")

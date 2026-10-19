@@ -18,7 +18,7 @@ from pathlib import Path
 
 # Allow running directly from a source checkout without installing the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from app.cache_pressure import CacheLogSummary
+from app.cache_pressure import CacheLogSummary, carry_forward_config
 
 INSPECT = (
     '{"id":{{json .Id}},"running":{{json .State.Running}},'
@@ -89,6 +89,11 @@ def main() -> None:
         state = observe(args.container, args.tail)
     except (OSError, ValueError, subprocess.SubprocessError):
         state = {"schema": 2, "observer_ok": False, "updated_at_ms": int(time.time() * 1000)}
+    try:
+        previous = json.loads(args.output.read_text())
+    except (OSError, ValueError):
+        previous = None
+    carry_forward_config(state, previous)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".gufo-cache-", dir=args.output.parent)
     try:

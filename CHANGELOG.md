@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Restore the full prompt for Messages requests after Gufo 0.12.0 stopped
+  including cache reads in `input_tokens`: non-stream bodies settle the
+  reporting era via the executed-prefill count, streamed full hits via
+  `input_tokens: 0`, and ambiguous streamed partials keep the reported input.
+  `prompt_tokens` keeps chat's full-prompt meaning and `context_used_pct`
+  stays correct for cached conversations.
+- Parse Gufo 0.13+'s merged `component-cache-v1` cache startup logs (one
+  `configured` line covering RAM and disk plus the prepared backing), show
+  the committed and long-term-pinned backing in the Cache panel, and reuse
+  the previous snapshot's config when the startup line has scrolled out of
+  the observer's log window (same Gufo version only).
+- Verify Gufo 0.18.0 compatibility: consumed `llamacpp:*` series and
+  HELP-line units are unchanged (two new prompt-lookup counters are not
+  consumed), and versioned 0.18.0 captures extend the counter
+  reconciliation to 154 executed + 294 cached = 448 full prompt tokens over
+  ten requests.
+
 ## 0.4.0 — 2026-10-09
 
 - Record usage, stop reason, and first-token timing for streamed `/v1/messages`
