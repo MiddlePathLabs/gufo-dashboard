@@ -323,7 +323,20 @@ def extract_responses(obj: Any) -> dict[str, Any]:
 
 def extract_messages(obj: Any) -> dict[str, Any]:
     o = _dict(obj)
-    r = normalize_usage(o.get("usage"), o.get("timings"))
+    u = _dict(o.get("usage"))
+    r = normalize_usage(u, o.get("timings"))
+    # Gufo 0.12+ excludes cache reads from input_tokens (Anthropic's
+    # convention); older Gufo included them. Restore the full prompt so the
+    # column keeps chat's meaning. With timings present, the executed-prefill
+    # count disambiguates the era; streams see no timings, so only the
+    # unambiguous full hit (input_tokens 0) is adjusted and partial-hit
+    # streams keep the reported input.
+    input_tokens = as_int(u.get("input_tokens"))
+    cache_read = as_int(u.get("cache_read_input_tokens"))
+    if input_tokens is not None and cache_read:
+        executed = as_int(_dict(o.get("timings")).get("prompt_n"))
+        if input_tokens == 0 or input_tokens == executed:
+            r["prompt_tokens"] = input_tokens + cache_read
     if sr := as_str(o.get("stop_reason")):
         r["finish_reason"] = sr
     if m := as_str(o.get("model"), 128):

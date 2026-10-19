@@ -9,7 +9,12 @@ from typing import Any
 
 import pytest
 
-from app.cache_pressure import MAX_STATE_BYTES, CacheLogSummary, read_cache_pressure
+from app.cache_pressure import (
+    MAX_STATE_BYTES,
+    CacheLogSummary,
+    carry_forward_config,
+    read_cache_pressure,
+)
 from scripts.observe_gufo_cache import log_level
 
 from .conftest import Dash, ServerThread, make_dash
@@ -25,6 +30,17 @@ RAM_V070 = (
 DISK = "event=disk_cache_configured capacity_bytes=8589934592 staging_capacity_bytes=1073741824"
 REMOVE = "event=snapshot action=removed reason=entry_capacity bytes=120588652 tokens=37 retained_bytes=366446316 reserved_bytes=0 capacity_bytes=14893594624"
 LRU = "event=disk_cache action=removed reason=lru file_bytes=100 payload_bytes=90 tokens=37 retained_bytes=800 capacity_bytes=1000 staging_capacity_bytes=50 staging_used_bytes=0"
+# Gufo 0.13+ replaces the two startup events with one merged line tagged
+# component-cache-v1, and reports the prepared host-memory backing separately.
+COMPONENT = (
+    "schema=component-cache-v1 event=configured sessions=1 snapshot_entries=128 "
+    "capacity_bytes=26165182464 staging_capacity_bytes=1048576 automatic_bytes=15230857216 "
+    "max_bytes=26165182464 disk_capacity_bytes=17179869184"
+)
+BACKING = (
+    "schema=component-cache-v1 event=backing_prepared committed_bytes=2278359040 "
+    "long_term_pinned_bytes=2278359040"
+)
 
 
 def test_cache_capacity_and_observed_events() -> None:
@@ -49,6 +65,68 @@ def test_gufo_v070_automatic_and_max_budgets() -> None:
     assert s.state["ram_capacity_bytes"] == 34359738368
     assert s.state["ram_automatic_bytes"] == 34359738368
     assert s.state["ram_max_bytes"] == 92085391360
+
+
+def test_component_cache_v1_configured_covers_both_tiers() -> None:
+    s = CacheLogSummary("0.18.0", "info")
+    s.feed(PREFIX + BACKING)
+    s.feed(PREFIX + COMPONENT)
+    state = s.state
+    assert state["ram_configured"] and state["disk_configured"]
+    assert state["config_source"] == "window"
+    assert state["ram_capacity_bytes"] == 26165182464
+    assert state["ram_automatic_bytes"] == 15230857216
+    assert state["ram_max_bytes"] == 26165182464
+    assert state["disk_capacity_bytes"] == 17179869184
+    assert state["disk_staging_capacity_bytes"] == 1048576
+    assert state["snapshot_entry_limit"] == 128 and state["sessions"] == 1
+    assert state["backing_committed_bytes"] == 2278359040
+    assert state["backing_pinned_bytes"] == 2278359040
+    # Startup events no longer use the pre-0.13 names on v1-schema servers.
+    fresh = CacheLogSummary("0.18.0", "info")
+    fresh.feed(PREFIX + "schema=component-cache-v1 event=defaults queue_budget_ms=5")
+    fresh.feed(PREFIX + COMPONENT)
+    assert fresh.state["ram_capacity_bytes"] == 26165182464
+
+
+def test_component_cache_v1_fields_reach_the_reader(tmp_path: Path) -> None:
+    p = tmp_path / "state.json"
+    s = CacheLogSummary("0.18.0", "info")
+    s.feed(PREFIX + BACKING)
+    s.feed(PREFIX + COMPONENT)
+    s.state.update(observer_ok=True, updated_at_ms=1000)
+    p.write_text(json.dumps(s.state))
+    state = read_cache_pressure(str(p), 2000)
+    assert state["available"] and state["config_source"] == "window"
+    assert state["disk_staging_capacity_bytes"] == 1048576
+    assert state["backing_committed_bytes"] == 2278359040
+
+
+def test_carry_forward_config_reuses_previous_window() -> None:
+    previous = {
+        "gufo_version": "0.18.0",
+        "ram_configured": True,
+        "disk_configured": True,
+        "ram_capacity_bytes": 26165182464,
+        "disk_capacity_bytes": 17179869184,
+        "backing_committed_bytes": 2278359040,
+    }
+    fresh = CacheLogSummary("0.18.0", "info").state
+    fresh.update(ram_entry_evictions=2)
+    carry_forward_config(fresh, previous)
+    assert fresh["ram_configured"] and fresh["config_source"] == "carried"
+    assert fresh["ram_capacity_bytes"] == 26165182464
+    assert fresh["backing_committed_bytes"] == 2278359040
+    assert fresh["ram_entry_evictions"] == 2  # window counts stay current
+    # A container swap (version change) never stitches configs together.
+    swapped = CacheLogSummary("0.19.0", "info").state
+    carry_forward_config(swapped, previous)
+    assert swapped["ram_configured"] is False and swapped["config_source"] is None
+    # A window that still holds the config wins over any previous snapshot.
+    seen = CacheLogSummary("0.18.0", "info").state
+    seen.update(ram_configured=True, ram_capacity_bytes=1, config_source="window")
+    carry_forward_config(seen, previous)
+    assert seen["ram_capacity_bytes"] == 1 and seen["config_source"] == "window"
 
 
 def test_reader_accepts_schema_1_state_files(tmp_path: Path) -> None:

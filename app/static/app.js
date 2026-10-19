@@ -512,6 +512,8 @@
       ["RAM cache budget", bytes(p.ram_capacity_bytes), "Configured RAM snapshot byte budget, not current usage or total server memory. Without --cache-ram-bytes it equals the automatic budget; Gufo 0.7.0 lets an explicit --cache-ram-bytes exceed the automatic budget."],
       ["Automatic RAM budget", bytes(p.ram_automatic_bytes), "The RAM budget Gufo sizes on its own: half of free RAM, at most 32 GiB. An explicit --cache-ram-bytes may exceed it, up to the maximum budget. Unavailable on state files from older observers."],
       ["Maximum RAM budget", bytes(p.ram_max_bytes), "The largest explicit --cache-ram-bytes Gufo 0.7.0 accepts: free RAM minus 4 GiB. Unavailable on state files from older observers."],
+      ["Backing committed", bytes(p.backing_committed_bytes), "Host memory committed to Gufo's component cache. Reported by component-cache-v1 servers (Gufo 0.13+); a dash means an older server or a window that no longer holds the startup line."],
+      ["Backing pinned long-term", bytes(p.backing_pinned_bytes), "The committed share pinned for the cache's lifetime rather than reclaimable under pressure. Reported by component-cache-v1 servers (Gufo 0.13+)."],
       ["RAM checkpoint limit", fInt(p.snapshot_entry_limit), "Maximum retained RAM checkpoint records. Gufo 0.5 allows 128 independently of execution sessions. One conversation can use several records; the byte budget can fill first."],
       ["Retained RAM checkpoints", "Unavailable", "Gufo does not report the current number of retained RAM checkpoints. The checkpoint limit is capacity, not occupancy."],
       ["Observed RAM entry evictions", fInt(p.ram_entry_evictions), "Checkpoint removals reported because the RAM entry limit was reached, counted within retained logs. RAM byte-budget removals are not logged and are excluded."],
@@ -522,7 +524,7 @@
       ["Disk captures skipped", fInt(p.disk_skipped), "Allowlisted disk-cache skip events counted within retained logs. The observer currently excludes Gufo 0.5 min_step skips, which avoid saving checkpoints that barely advance a stored prefix."],
       ["Gufo version", esc(p.gufo_version || "unknown"), "Runtime image version read by the host cache observer. A version alone does not prove a metric is available."],
       ["Log level", esc(p.log_level || "unknown"), "Gufo log verbosity. Info or debug exposes startup capacities and disk LRU events; warn or error hides some diagnostics."],
-      ["Log window starts", isNum(p.window_start_ms) ? esc(fDateTime(p.window_start_ms)) : DASH, "Earliest timestamp in the observer's retained log window. Event counts cover this window, not all-time history; log rotation or the tail limit can shorten it."],
+      ["Log window starts", isNum(p.window_start_ms) ? esc(fDateTime(p.window_start_ms)) : DASH, "Earliest timestamp in the observer's retained log window. Event counts cover this window, not all-time history; log rotation or the tail limit can shorten it." + (p.config_source === "carried" ? " The startup config line scrolled out of this window; capacities are reused from the previous snapshot." : "")],
     ];
     const events = (p.events || []).slice(-5).reverse().map((e) => [
       `${fDateTime(e.ts_ms)} · ${e.tier === "ram" ? "RAM" : "Disk"}`,

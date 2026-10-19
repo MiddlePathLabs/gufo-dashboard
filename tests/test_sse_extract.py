@@ -202,6 +202,48 @@ def test_chat_reasoning_tokens_null() -> None:
     )
 
 
+def test_messages_full_prompt_restored_across_cache_eras() -> None:
+    # Gufo 0.12+ excludes cache reads from input_tokens; 0.11 and earlier
+    # included them. Timings settle the era on non-stream bodies.
+    def row(usage: dict[str, Any], timings: dict[str, Any] | None = None) -> Any:
+        return extract.extract_messages({"usage": usage, "timings": timings})
+
+    full_hit = row({"input_tokens": 0, "cache_read_input_tokens": 47})
+    assert full_hit["prompt_tokens"] == 47 and full_hit["cached_tokens"] == 47
+    partial = row({"input_tokens": 15, "cache_read_input_tokens": 40}, {"prompt_n": 15})
+    assert partial["prompt_tokens"] == 55
+    inclusive = row({"input_tokens": 55, "cache_read_input_tokens": 40}, {"prompt_n": 15})
+    assert inclusive["prompt_tokens"] == 55
+    uncached = row({"input_tokens": 49, "cache_read_input_tokens": 0}, {"prompt_n": 49})
+    assert uncached["prompt_tokens"] == 49
+
+
+def test_messages_stream_full_hit_restored_partial_kept() -> None:
+    # Streamed message_delta events carry no timings: the unambiguous full
+    # hit (input_tokens 0) is restored; an ambiguous partial keeps the
+    # reported input rather than guessing the era.
+    def stream(usage: dict[str, Any]) -> dict[str, Any]:
+        event = {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": usage}
+        body = b"".join(
+            b"data: " + json.dumps(e, separators=(",", ":")).encode() + b"\n\n" for e in [event]
+        )
+        inspector, _, _ = _inspect("messages", body, False)
+        return inspector.fields
+
+    assert (
+        stream({"input_tokens": 0, "cache_read_input_tokens": 14, "output_tokens": 1})[
+            "prompt_tokens"
+        ]
+        == 14
+    )
+    assert (
+        stream({"input_tokens": 10, "cache_read_input_tokens": 37, "output_tokens": 2})[
+            "prompt_tokens"
+        ]
+        == 10
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Synthetic variants
 # --------------------------------------------------------------------------- #

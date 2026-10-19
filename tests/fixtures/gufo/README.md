@@ -70,3 +70,11 @@ The [versioned captures](v0.10.0/README.md) add streamed `/v1/messages`
 (full usage and stop reason on the `message_delta` event; tool arguments as
 `input_json_delta`) and Messages tool calls, with unchanged consumed series
 and HELP-line units.
+
+## Gufo 0.18.0
+
+The [versioned captures](v0.18.0/README.md) pin the post-0.12.0 Messages
+usage semantics (`input_tokens` excludes cache reads; the recorder restores
+the full prompt), the two unconsumed prompt-lookup counters, and tool-call
+replays as full-prompt cache hits, with unchanged consumed series and
+HELP-line units.

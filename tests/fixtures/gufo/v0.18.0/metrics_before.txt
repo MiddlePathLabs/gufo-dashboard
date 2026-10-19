@@ -1,0 +1,51 @@
+# HELP gufo_device_lost_total Confirmed GPU context losses
+# TYPE gufo_device_lost_total counter
+gufo_device_lost_total 0
+# HELP llamacpp:prompt_tokens_total Total prompt tokens processed, excluding cache hits
+# TYPE llamacpp:prompt_tokens_total counter
+llamacpp:prompt_tokens_total 104
+# HELP llamacpp:prompt_tokens_cached_total Total prompt tokens reused from cache
+# TYPE llamacpp:prompt_tokens_cached_total counter
+llamacpp:prompt_tokens_cached_total 49
+# HELP llamacpp:prompt_seconds_total Prompt process time
+# TYPE llamacpp:prompt_seconds_total counter
+llamacpp:prompt_seconds_total 0.384399292
+# HELP llamacpp:tokens_predicted_total Total tokens generated
+# TYPE llamacpp:tokens_predicted_total counter
+llamacpp:tokens_predicted_total 24
+# HELP llamacpp:tokens_predicted_seconds_total Predict process time
+# TYPE llamacpp:tokens_predicted_seconds_total counter
+llamacpp:tokens_predicted_seconds_total 0.35990622900000002
+# HELP llamacpp:n_tokens_max Largest observed n_tokens.
+# TYPE llamacpp:n_tokens_max counter
+llamacpp:n_tokens_max 63
+# HELP llamacpp:spec_decode_num_drafts_total Total speculative verification rounds
+# TYPE llamacpp:spec_decode_num_drafts_total counter
+llamacpp:spec_decode_num_drafts_total 6
+# HELP llamacpp:spec_decode_num_draft_tokens_total Total draft tokens proposed
+# TYPE llamacpp:spec_decode_num_draft_tokens_total counter
+llamacpp:spec_decode_num_draft_tokens_total 18
+# HELP llamacpp:spec_decode_num_accepted_tokens_total Total draft tokens accepted
+# TYPE llamacpp:spec_decode_num_accepted_tokens_total counter
+llamacpp:spec_decode_num_accepted_tokens_total 18
+# HELP gufo_spec_lookup_tokens_total Total prompt-lookup copies proposed
+# TYPE gufo_spec_lookup_tokens_total counter
+gufo_spec_lookup_tokens_total 0
+# HELP gufo_spec_lookup_accepted_tokens_total Total prompt-lookup copies accepted
+# TYPE gufo_spec_lookup_accepted_tokens_total counter
+gufo_spec_lookup_accepted_tokens_total 0
+# HELP llamacpp:prompt_tokens_seconds Prompt processing speed in tokens per second
+# TYPE llamacpp:prompt_tokens_seconds gauge
+llamacpp:prompt_tokens_seconds 291.42578140140483
+# HELP llamacpp:predicted_tokens_seconds Generation speed in tokens per second
+# TYPE llamacpp:predicted_tokens_seconds gauge
+llamacpp:predicted_tokens_seconds 71.281395712538099
+# HELP llamacpp:requests_processing Number of admitted requests, including cache preparation
+# TYPE llamacpp:requests_processing gauge
+llamacpp:requests_processing 0
+# HELP llamacpp:requests_deferred Number of requests waiting for a session
+# TYPE llamacpp:requests_deferred gauge
+llamacpp:requests_deferred 0
+# HELP llamacpp:kv_cache_usage_ratio In-flight prompt and generated tokens over sessions times context; excludes retained cache
+# TYPE llamacpp:kv_cache_usage_ratio gauge
+llamacpp:kv_cache_usage_ratio 0
