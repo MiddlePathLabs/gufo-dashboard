@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-19
 
 - Restore the full prompt for Messages requests after Gufo 0.12.0 stopped
   including cache reads in `input_tokens`: non-stream bodies settle the
