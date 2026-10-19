@@ -159,6 +159,7 @@
     $("status-text").className = s.online ? "" : "muted";
     $("cur-model").textContent = s.model || DASH;
     $("cur-model").title = s.model || "";
+    $("gufo-version").textContent = s.gufo_version || DASH;
     $("cur-ctx").textContent = isNum(s.context_length) ? fInt(s.context_length) : DASH;
     $("ready-for").textContent = isNum(s.observed_ready_ms) ? fDur(s.observed_ready_ms) : DASH;
 
@@ -301,6 +302,7 @@
   document.querySelectorAll("[data-metric]").forEach((el) => { el.title = statHelp(el.dataset.metric); });
   $("cur-ctx").parentElement.title = statHelp("Context");
   $("cur-model").parentElement.title = "Model currently loaded in Gufo. Selected-range statistics can also include previously loaded models.";
+  $("gufo-version").parentElement.title = "Version of the running Gufo runtime image, read from the image label by the host cache observer. A dash means the observer is not configured or its state file is unavailable.";
   $("status-text").title = "Online means the latest Gufo readiness poll succeeded. Offline means Gufo was not ready or the poll failed.";
   $("refresh-text").title = "Age of the latest successful refresh. Pausing affects dashboard refreshes, not Gufo inference or request recording.";
   $("capture-status").title = "Whether future proxied questions and visible answers are captured, with the configured retention in days. Numeric metrics are recorded separately.";

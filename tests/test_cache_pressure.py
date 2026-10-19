@@ -147,8 +147,24 @@ def test_status_cache_capabilities(tmp_path: Path, fake_server: ServerThread) ->
             s = client.get("/api/status").json()
             assert s["capabilities"]["cache_pressure"] is True
             assert s["cache_pressure"]["snapshot_entry_limit"] == 4
+            assert s["gufo_version"] == "0.4.0"
+            # The header readout survives a stale observer state file.
+            p.write_text(json.dumps({**json.loads(p.read_text()), "updated_at_ms": 1}))
+            s = client.get("/api/status").json()
+            assert s["cache_pressure"]["available"] is False
+            assert s["gufo_version"] == "0.4.0"
             assert s["capabilities"]["live_requests"] is False
             assert s["upstream_requests"]["deferred"] is None
+    finally:
+        d.server.stop()
+
+
+def test_status_gufo_version_without_observer(tmp_path: Path, fake_server: ServerThread) -> None:
+    d: Dash = make_dash(tmp_path, fake_server.url)
+    try:
+        with d.client() as client:
+            s = client.get("/api/status").json()
+            assert s["gufo_version"] is None
     finally:
         d.server.stop()
 
