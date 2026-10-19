@@ -71,6 +71,9 @@ def status(request: Request) -> dict[str, Any]:
     pressure = read_cache_pressure(ctx.settings.gufo_cache_state_path, now)
     return {
         "version": dashboard_version(),
+        # Gufo publishes no version over HTTP; the observer's state file is
+        # the only source, so the header readout survives a stale file.
+        "gufo_version": pressure.get("gufo_version"),
         **poller.status(),
         "cache_pressure": pressure,
         "capabilities": {
