@@ -154,6 +154,50 @@ def test_cache_endpoint_miss_reasons(conn: sqlite3.Connection) -> None:
     assert c["restore_avg_ms"] == pytest.approx(7.958364)
 
 
+def test_cache_endpoint_ttft_bands(conn: sqlite3.Connection) -> None:
+    rows = [
+        rec_from("chat_nonstream", prompt_tokens=500, cache_hit=1, ttft_ms=100.0),
+        rec_from("chat_nonstream", prompt_tokens=500, cache_hit=0, ttft_ms=300.0),
+        rec_from("chat_nonstream", prompt_tokens=5_000, cache_hit=1, ttft_ms=200.0),
+        rec_from("chat_nonstream", prompt_tokens=5_000, cache_hit=1, ttft_ms=400.0),
+        rec_from("chat_nonstream", prompt_tokens=5_000, cache_hit=0, ttft_ms=2_000.0),
+        # No cache verdict / no TTFT: excluded from the bands entirely.
+        rec_from("chat_nonstream", prompt_tokens=5_000, cache_hit=None, ttft_ms=5.0),
+        rec_from("chat_nonstream", prompt_tokens=5_000, cache_hit=1, ttft_ms=None),
+        # 64k+ band with misses only.
+        rec_from("chat_nonstream", prompt_tokens=200_000, cache_hit=0, ttft_ms=9_000.0),
+        # Other model: bands never mix models.
+        rec_from(
+            "chat_nonstream",
+            model=OTHER,
+            prompt_tokens=500,
+            cache_hit=1,
+            ttft_ms=50.0,
+        ),
+    ]
+    insert(conn, *rows)
+    c = stats.cache(conn, "24h", MODEL, NOW)["per_model"][0]
+    bands = c["ttft_bands"]
+    assert [b["label"] for b in bands] == ["<1k", "4k-16k", "64k+"]
+    sub_1k, mid, top = bands
+    assert sub_1k["hit_ms"] == 100.0 and sub_1k["hit_n"] == 1
+    assert sub_1k["miss_ms"] == 300.0 and sub_1k["miss_n"] == 1
+    assert mid["hit_ms"] == 300.0 and mid["hit_n"] == 2
+    assert mid["miss_ms"] == 2_000.0 and mid["miss_n"] == 1
+    assert top["hit_ms"] is None and top["hit_n"] == 0
+    assert top["miss_ms"] == 9_000.0 and top["miss_n"] == 1
+    other = stats.cache(conn, "24h", OTHER, NOW)["per_model"][0]
+    assert [(b["label"], b["hit_ms"], b["miss_ms"]) for b in other["ttft_bands"]] == [
+        ("<1k", 50.0, None)
+    ]
+
+
+def test_cache_endpoint_ttft_bands_empty(conn: sqlite3.Connection) -> None:
+    insert(conn, rec_from("messages_nonstream", kind="messages"))  # no cache verdict, no TTFT
+    c = stats.cache(conn, "24h", MODEL, NOW)["per_model"][0]
+    assert c["ttft_bands"] == []
+
+
 # --------------------------------------------------------------------------- #
 # Retention and rollup
 # --------------------------------------------------------------------------- #

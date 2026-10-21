@@ -203,7 +203,9 @@
     "Hits / misses": "Counts of explicit cache_hit=true and cache_hit=false results. Requests without a reported cache result are excluded.",
     "Requests with cache data": "Requests with an explicit cache-hit result, divided by all recorded requests for this model and range.",
     "Cached tokens": "Reported prompt tokens reused from cache. Aggregate totals include available counts even when no cache-hit flag was reported.",
+    "Prompt composition": "Cached tokens plus newly prefilled tokens make up the reported prompt tokens. Green is cache reuse, gold is prefill work — the same colors as the timing bar. When Gufo reports no prefilled count, it is derived as prompt minus cached.",
     "Cached-token share": "Summed cached tokens divided by summed prompt tokens, using requests that report both values. This measures token reuse, not the fraction of requests that hit cache.",
+    "First reply by prompt size": "Median time to first token for cache hits versus misses, compared only within the same prompt-size band so short prompts are never averaged against long ones. Each median shows n, the requests with both a cache result and a TTFT measurement behind it; n=1 is a single request. Bands without such requests are hidden.",
     "Avg restore (hits)": "Average reported cache-restore duration among cache hits with a restore timing. Missing timings are excluded.",
     "tokens_predicted_total": "Gufo's generated-token counter since the engine counter was reset, including direct and proxied traffic. The dashboard tracks resets when estimating unattributed work.",
     "Gufo requests processing": "Gufo-wide admitted requests, including cache preparation and direct traffic. This is a live count, not the configured execution-session limit.",
@@ -503,6 +505,17 @@
   function modelHead(name, many) {
     return many ? `<div class="model-h" title="${esc(name)}">${esc(name || "(unknown model)")}</div>` : "";
   }
+  function bandTable(m) {
+    // Like-for-like: hit and miss medians only ever share a row when the
+    // prompts behind them are in the same size band.
+    const bands = (m.ttft_bands || []).filter((b) => isNum(b.hit_ms) || isNum(b.miss_ms));
+    if (!bands.length) return "";
+    const cell = (ms, n) => (isNum(ms) ? `${fMs(ms)} <span class="bn">(${fInt(n)})</span>` : DASH);
+    return `<h3 class="insight-subhead" ${helpTitle("First reply by prompt size")}>FIRST REPLY BY PROMPT SIZE</h3>`
+      + `<table class="bands"><thead><tr><th scope="col">prompt</th><th scope="col" ${helpTitle("Result")}>hit TTFT</th><th scope="col" title="${esc(statHelp("TTFT"))} Cache-miss medians for the same band.">miss TTFT</th></tr></thead><tbody>`
+      + bands.map((b) => `<tr><td>${esc(b.label)}</td><td class="hit" ${helpTitle("Result")}>${cell(b.hit_ms, b.hit_n)}</td><td class="miss">${cell(b.miss_ms, b.miss_n)}</td></tr>`).join("")
+      + `</tbody></table><p class="note" ${helpTitle("First reply by prompt size")}>Like for like within a band; n shows the requests behind each median.</p>`;
+  }
   function cachePressureView() {
     const p = state.status?.cache_pressure;
     const heading = '<h3 class="insight-subhead">CURRENT GUFO EXECUTION AND CACHE</h3>';
@@ -567,8 +580,9 @@
           ["Avg restore (hits)", fMs(m.restore_avg_ms)],
           ["Saved prefill (estimate)", isNum(m.saved_prefill_s_estimate) ? fMs(m.saved_prefill_s_estimate * 1000) : DASH,
             "Σ cached tokens ÷ this model's weighted prefill tok/s. An estimate."],
-        ]) + (reasons.length ? `<h3 class="insight-subhead">MISS REASONS</h3>${kvRows(reasons.map(([r, n]) => [r, fInt(n), `${MISS_HELP[r] || "Cache-miss reason supplied by Gufo; its detailed meaning is not defined by this dashboard."} Count of misses in retained requests for the selected range and model. All-time breakdowns cover retained raw rows only.`]))}` : "");
-      }).join("") + `<p class="note">Saved prefill is an estimate.${state.range === "all" ? " Miss reasons cover retained rows only." : ""}</p>` + cachePressureView();
+        ]) + bandTable(m)
+        + (reasons.length ? `<h3 class="insight-subhead">MISS REASONS</h3>${kvRows(reasons.map(([r, n]) => [r, fInt(n), `${MISS_HELP[r] || "Cache-miss reason supplied by Gufo; its detailed meaning is not defined by this dashboard."} Count of misses in retained requests for the selected range and model. All-time breakdowns cover retained raw rows only.`]))}` : "");
+      }).join("") + `<p class="note">Saved prefill is an estimate.${state.range === "all" ? " Bands and miss reasons cover retained rows only." : ""}</p>` + cachePressureView();
     } else {
       const s = state.status;
       if (!s) { body.innerHTML = ""; return; }
@@ -636,7 +650,10 @@
     const badges = [];
     if (it.is_streaming) badges.push(`<span class="badge" ${helpTitle("Streaming")}>STREAM</span>`);
     if (it.is_vision) badges.push(`<span class="badge" title="${esc(statHelp("Vision / images"))} ${esc(it.image_count)} image(s).">VISION</span>`);
-    if (it.cache_hit === 1) badges.push(`<span class="badge hit" ${helpTitle("Result")}>HIT</span>`);
+    // A hit can reuse only part of a prompt: show how much when both counts exist.
+    const hitShare = isNum(it.cached_tokens) && isNum(it.prompt_tokens) && it.prompt_tokens > 0
+      ? Math.round((100 * it.cached_tokens) / it.prompt_tokens) : null;
+    if (it.cache_hit === 1) badges.push(`<span class="badge hit" title="${esc(statHelp("Result"))}${hitShare !== null ? ` ${hitShare}% of this prompt's tokens were reused from cache.` : ""}">HIT${hitShare !== null ? ` ${hitShare}%` : ""}</span>`);
     else if (it.cache_hit === 0) badges.push(`<span class="badge miss" ${helpTitle("Result")}>MISS</span>`);
     if (it.error_code) badges.push(`<span class="badge err" ${helpTitle("Error code")}>${esc(it.error_code)}</span>`);
     const ep = ENDPOINT_SHORT[it.endpoint] || it.endpoint;
@@ -886,6 +903,17 @@
       + `<span title="${esc(timingHelp.decode)}"><i style="background:var(--accent)"></i>decode ${isNum(d) ? fMs(d) : "unavailable"}</span>`
       + `<span ${helpTitle("TTFT")}>TTFT ${fMs(r.ttft_ms)}</span><span ${helpTitle("Total duration")}>Total ${fMs(r.total_request_ms)}</span></div>${[q, p, d].some((v) => !isNum(v)) ? `<p class="note">Only reported segments are drawn; unavailable durations are unknown.</p>` : ""}</section>`;
   }
+  function promptBar(r) {
+    if (!isNum(r.prompt_tokens) || !isNum(r.cached_tokens)) return "";
+    const prompt = r.prompt_tokens;
+    const cached = Math.max(0, Math.min(r.cached_tokens, prompt));
+    const prefilled = isNum(r.prefill_tokens) ? r.prefill_tokens : prompt - cached;
+    const cw = prompt > 0 ? Math.min(100, (100 * cached) / prompt) : 0;
+    const pw = Math.max(0, 100 - cw);
+    const help = statHelp("Prompt composition") + " A dash means unavailable, not zero.";
+    return `<div class="ctxbar tokbar" role="img" aria-label="Prompt composition: ${fInt(cached)} tokens from cache, ${fInt(prefilled)} prefilled, of ${fInt(prompt)} prompt tokens." title="${esc(help)}"><div class="tk-c" style="width:${cw}%"></div><div class="tk-p" style="width:${pw}%"></div></div>`
+      + `<div class="note" ${helpTitle("Prompt composition")}><span class="tkc-t">${fInt(cached)}</span> from cache + <span class="tkp-t">${fInt(prefilled)}</span> prefilled = ${fInt(prompt)} prompt</div>`;
+  }
   function renderDetail(r) {
     $("detail-id").textContent = `#${r.id}`;
     const acc = isNum(r.draft_tokens) && r.draft_tokens > 0 && isNum(r.draft_tokens_accepted) ? r.draft_tokens_accepted / r.draft_tokens : null;
@@ -909,7 +937,7 @@
           ["Vision / images", r.is_vision ? `Yes / ${fInt(r.image_count)}` : "No"], ["TTFT source", esc(r.ttft_source || DASH)]])}
         ${section("Tokens", [
           ["Prompt", fInt(r.prompt_tokens)], ["Cached", fInt(r.cached_tokens)], ["Prefilled", fInt(r.prefill_tokens)],
-          ["Generated", fInt(r.completion_tokens)], ["Reasoning", fInt(r.reasoning_tokens)]], ctx)}
+          ["Generated", fInt(r.completion_tokens)], ["Reasoning", fInt(r.reasoning_tokens)]], promptBar(r) + ctx)}
         ${section("Speed", [
           ["Prefill tok/s", fTps(r.prompt_tokens_per_second)], ["Decode tok/s", fTps(r.completion_tokens_per_second)],
           ["Mean inter-token", fMs(r.mean_inter_token_ms)], ["Max inter-token", fMs(r.max_inter_token_ms)],

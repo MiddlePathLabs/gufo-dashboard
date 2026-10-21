@@ -144,6 +144,15 @@ table.kvt td .mono { white-space: nowrap; display: inline-block; max-width: 24ch
 .model-h:first-child { margin-top: 0; }
 .note { color: var(--muted); font-size: var(--fs-small); margin: 6px 0 0; }
 .note.warn { color: var(--warn); }
+table.bands { width: 100%; border-collapse: collapse; margin-top: 2px; }
+table.bands th, table.bands td { padding: 3px 0; border-bottom: 1px solid var(--border); font-weight: 400; font-size: 12px; }
+table.bands tr:last-child th, table.bands tr:last-child td { border-bottom: 0; }
+table.bands th { color: var(--muted); text-align: right; white-space: nowrap; }
+table.bands th:first-child, table.bands td:first-child { text-align: left; color: var(--muted); white-space: nowrap; }
+table.bands td { text-align: right; color: var(--text-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.bands td.hit { color: var(--ok); }
+table.bands td.miss { color: var(--warn); }
+table.bands .bn { color: var(--muted); font-size: 11px; }
 .insight-actions { margin-top: 10px; display: flex; justify-content: flex-end; }
 
 /* ---------- split: feed + detail ---------- */
@@ -200,6 +209,11 @@ table.kvt td .mono { white-space: nowrap; display: inline-block; max-width: 24ch
 .tl-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
 .ctxbar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin: 4px 0 2px; border: 1px solid var(--border); }
 .ctxbar > div { height: 100%; background: var(--accent); }
+.ctxbar.tokbar { display: flex; }
+.ctxbar > .tk-c { background: var(--ok); }
+.ctxbar > .tk-p { background: var(--warn); }
+.note .tkc-t { color: var(--ok); }
+.note .tkp-t { color: var(--warn); }
 .status-line { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
 .status-line .mono { color: var(--text-strong); }
 
