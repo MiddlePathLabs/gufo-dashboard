@@ -554,6 +554,53 @@ def speculative(
     return {"range": range_, "model": model, "per_model": out}
 
 
+# Prompt-size bands for like-for-like hit/miss TTFT comparison: medians are
+# only ever compared within one band, so short prompts never average against
+# long ones. Bands with no qualifying request are omitted, not zero-filled.
+TTFT_BAND_EDGES: tuple[tuple[int, int | None, str], ...] = (
+    (0, 1_000, "<1k"),
+    (1_000, 4_000, "1k-4k"),
+    (4_000, 16_000, "4k-16k"),
+    (16_000, 64_000, "16k-64k"),
+    (64_000, None, "64k+"),
+)
+
+
+def _ttft_bands(
+    conn: sqlite3.Connection, where: str, params: list[Any]
+) -> dict[str, list[dict[str, Any]]]:
+    """Per-model median TTFT for cache hits vs misses, banded by prompt size.
+
+    Only rows with a cache verdict, a TTFT and a prompt size count; each
+    median reports its own n so single-request medians stay visible.
+    """
+    vals: dict[tuple[str, int], dict[int, list[float]]] = {}
+    for r in conn.execute(
+        f"SELECT model, prompt_tokens, cache_hit, ttft_ms FROM request_stats{where}"
+        + (" AND" if where else " WHERE")
+        + " cache_hit IS NOT NULL AND ttft_ms IS NOT NULL AND prompt_tokens IS NOT NULL",
+        params,
+    ):
+        for i, (lo, hi, _label) in enumerate(TTFT_BAND_EDGES):
+            if r["prompt_tokens"] >= lo and (hi is None or r["prompt_tokens"] < hi):
+                by_verdict = vals.setdefault((r["model"] or "", i), {0: [], 1: []})
+                by_verdict[r["cache_hit"]].append(r["ttft_ms"])
+                break
+    bands: dict[str, list[dict[str, Any]]] = {}
+    for (name, i), by_verdict in sorted(vals.items()):
+        hits, misses = by_verdict[1], by_verdict[0]
+        bands.setdefault(name, []).append(
+            {
+                "label": TTFT_BAND_EDGES[i][2],
+                "hit_ms": percentile(hits, 50),
+                "hit_n": len(hits),
+                "miss_ms": percentile(misses, 50),
+                "miss_n": len(misses),
+            }
+        )
+    return bands
+
+
 def cache(conn: sqlite3.Connection, range_: str, model: str | None, now: int) -> dict[str, Any]:
     start, end, aggs = _model_aggs(conn, range_, model, now)
     where, params = _where(start, end, model)
@@ -565,6 +612,7 @@ def cache(conn: sqlite3.Connection, range_: str, model: str | None, now: int) ->
         params,
     ):
         reasons.setdefault(r[0] or "", {})[r[1] or "unknown"] = r[2]
+    bands = _ttft_bands(conn, where, params)
     out = []
     for name, a in sorted(aggs.items()):
         r = rates_block(a)
@@ -582,6 +630,7 @@ def cache(conn: sqlite3.Connection, range_: str, model: str | None, now: int) ->
                 "prefill_tps_weighted": r["prefill_tps_weighted"],
                 "saved_prefill_s_estimate": r["saved_prefill_s_estimate"],
                 "miss_reasons": reasons.get(name, {}),
+                "ttft_bands": bands.get(name, []),
             }
         )
     return {

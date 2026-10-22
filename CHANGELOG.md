@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Show what the cache is worth, like for like: the Cache panel adds a
+  "First reply by prompt size" table comparing median time to first token for
+  cache hits versus misses within prompt-size bands (<1k, 1k-4k, 4k-16k,
+  16k-64k, 64k+), so short prompts are never averaged against long ones. Each
+  median reports its own n (requests with both a cache result and a TTFT);
+  bands without such requests are hidden and all-time bands cover retained
+  rows only, like the other raw-row breakdowns.
+- Make the prompt's cache share visible per request: the request detail shows
+  a cached-versus-prefilled composition bar spelling out the identity
+  "N from cache + M prefilled = prompt tokens" (prefilled is derived as
+  prompt minus cached when Gufo reports no executed count), and the activity
+  feed's HIT badge shows the reused share (for example `HIT 92%`) because a
+  hit can reuse only part of a prompt.
+
 ## 0.5.0 — 2026-10-19
 
 - Restore the full prompt for Messages requests after Gufo 0.12.0 stopped

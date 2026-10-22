@@ -20,6 +20,9 @@ identifiers are anonymized; these figures illustrate the interface, not a benchm
   with separate retention and deletion controls.
 - Keeps throughput, time to first token, cache hits, and draft acceptance separate
   for each model.
+- Compares cache hit and miss time-to-first-token medians within prompt-size
+  bands (like for like), shows each request's cached-versus-prefilled prompt
+  composition, and labels hits with the reused share of the prompt.
 - Optionally shows snapshot-cache budgets and observed eviction events through
   a [host cache observer](docs/deployment.md#cache-pressure-observer).
 - Stores statistics in SQLite with configurable retention and daily rollups.
