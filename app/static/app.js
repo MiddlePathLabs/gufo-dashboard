@@ -177,6 +177,14 @@
         ? "The main port: requests are forwarded unchanged."
         : "The projection port: chat completions sent there get \"projection\": true. Its stats appear here too.";
     }
+    // Projection controls only exist for operators who opened the port;
+    // without it they would be empty for anyone who never uses projection.
+    const enabled = !!l?.projection_port;
+    for (const [box, attr, fallback] of [["insight-tabs", "tab", "spec"], ["feed-filter", "filter", "all"]]) {
+      const btn = $(box).querySelector(`[data-${attr}="projection"]`);
+      btn.hidden = !enabled;
+      if (!enabled && btn.classList.contains("on")) $(box).querySelector(`[data-${attr}="${fallback}"]`).click();
+    }
     document.title = projected ? `Gufo Dashboard · Projection :${location.port}` : "Gufo Dashboard";
     const fill = projected ? "%23c08cff" : "%236aa9ff";
     $("favicon").href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='9' width='3' height='6' fill='${fill}'/%3E%3Crect x='6.5' y='5' width='3' height='10' fill='${fill}'/%3E%3Crect x='12' y='1' width='3' height='14' fill='${fill}'/%3E%3C/svg%3E`;
@@ -507,7 +515,7 @@
     });
     if (isTablist) box.addEventListener("keydown", (e) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-      const buttons = [...box.querySelectorAll("button")];
+      const buttons = [...box.querySelectorAll("button")].filter((b) => !b.hidden);
       const index = buttons.indexOf(document.activeElement);
       if (index < 0) return;
       e.preventDefault();
@@ -737,7 +745,7 @@
     if (f.error) html += `<p class="empty">Activity could not be refreshed. <button class="btn" id="retry-feed" type="button">Retry activity</button></p>`;
     else if (!f.items.length && f.done) {
       const filtered = state.filter !== "all" || !!state.model;
-      const filterLabel = { errors: "errors", vision: "vision requests", streaming: "streaming requests", all: "requests", content: "requests with content", partial: "incomplete captures" }[state.filter];
+      const filterLabel = { errors: "errors", vision: "vision requests", streaming: "streaming requests", all: "requests", content: "requests with content", partial: "incomplete captures", projection: "projected requests" }[state.filter];
       html += filtered ? `<p class="empty">No ${filterLabel} match ${state.model ? "this model and filter" : "this filter"}.<br>Try another model or activity filter.</p>` : `<p class="empty">No activity yet.<br>Send requests to <code>${esc(proxyUrl)}</code> to start recording.</p>`;
     }
     else if (f.loading) html += `<div class="feed-more">loading…</div>`;
@@ -995,7 +1003,7 @@
           ["HTTP status", fInt(r.http_status)], ["Error code", esc(r.error_code || DASH)],
           ["Finish reason", esc(r.finish_reason || DASH)], ["Streaming", r.is_streaming ? "Yes" : "No"],
           ["Vision / images", r.is_vision ? `Yes / ${fInt(r.image_count)}` : "No"],
-          ["Projection", r.projection === true ? "On" : r.projection === false ? "Off" : "Unset"], ["TTFT source", esc(r.ttft_source || DASH)]])}
+          ...(typeof r.projection === "boolean" ? [["Projection", r.projection ? "On" : "Off"]] : []), ["TTFT source", esc(r.ttft_source || DASH)]])}
         ${section("Tokens", [
           ["Prompt", fInt(r.prompt_tokens)], ["Cached", fInt(r.cached_tokens)], ["Prefilled", fInt(r.prefill_tokens)],
           ["Generated", fInt(r.completion_tokens)], ["Reasoning", fInt(r.reasoning_tokens)]], promptBar(r) + ctx)}

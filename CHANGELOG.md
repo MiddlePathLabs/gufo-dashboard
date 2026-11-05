@@ -10,6 +10,11 @@
   refused on that port rather than run unsteered. Requests record their
   projection state (schema version 3 adds the column in place), with a `PROJ`
   badge, a request-detail row and a Projection activity filter.
+- Keep projection out of sight for anyone not using it: the Projection
+  insight tab and Activity filter appear only when `PROJECTION_PORT` is set,
+  and the request detail lists projection only for requests that set the
+  field. The schema still moves to version 3 on first start (one nullable
+  column); older releases cannot open the database afterwards.
 - Give the projection port its own model ids: `/v1/models` there lists each
   model with `PROJECTION_MODEL_SUFFIX` (default `-projection`) appended, and
   requests naming the alias are forwarded and recorded under the served id.
