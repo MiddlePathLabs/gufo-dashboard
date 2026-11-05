@@ -404,7 +404,7 @@ def _day_ms(day: str) -> int:
 # -- activity feed ----------------------------------------------------------- #
 
 _REQUEST_LIST_COLS = (
-    "id, completed_at_ms, started_at_ms, endpoint, model, is_streaming, is_vision, image_count, "
+    "id, completed_at_ms, started_at_ms, endpoint, model, is_streaming, is_vision, image_count, projection, "
     "http_status, error_code, finish_reason, prompt_tokens, cached_tokens, completion_tokens, "
     "completion_tokens_per_second, total_request_ms, cache_hit, ttft_ms, ttft_source"
 )
@@ -415,6 +415,7 @@ _FILTERS = {
     "errors": " AND (http_status >= 400 OR error_code IS NOT NULL)",
     "vision": " AND is_vision = 1",
     "streaming": " AND is_streaming = 1",
+    "projection": " AND projection = 1",
     "cancelled": " AND finish_reason = 'client_cancelled'",
 }
 
@@ -511,7 +512,7 @@ def request_detail(conn: sqlite3.Connection, ident: int) -> dict[str, Any] | Non
         d["extra_metrics"] = json.loads(d["extra_metrics"]) if d["extra_metrics"] else {}
     except ValueError:
         d["extra_metrics"] = {}
-    for k in ("is_streaming", "is_vision", "cache_hit"):
+    for k in ("is_streaming", "is_vision", "projection", "cache_hit"):
         if d.get(k) is not None:
             d[k] = bool(d[k])
     return d
@@ -552,6 +553,62 @@ def speculative(
             }
         )
     return {"range": range_, "model": model, "per_model": out}
+
+
+def projection(
+    conn: sqlite3.Connection, range_: str, model: str | None, now: int
+) -> dict[str, Any]:
+    """Plain versus projected traffic, per model, from retained raw rows.
+
+    Projected means the forwarded body set `"projection": true`; requests
+    that left it unset or set it false count as plain. The daily rollup has
+    no projection dimension, so `all` covers retained rows only.
+    """
+    start, end = resolve_range(range_, now)
+    where, params = _where(start, end, model)
+    groups: dict[tuple[str, bool], dict[str, Any]] = {}
+    for r in conn.execute(
+        f"SELECT model, COALESCE(projection, 0) = 1 AS projected, {_AGG_SELECT} "
+        f"FROM request_stats{where} GROUP BY model, projected",
+        params,
+    ).fetchall():
+        groups[(r["model"] or "", bool(r["projected"]))] = dict(r)
+    samples: dict[tuple[str, bool], tuple[list[float], list[float]]] = {}
+    for r in conn.execute(
+        f"SELECT model, COALESCE(projection, 0) = 1, ttft_ms, completion_tokens_per_second "
+        f"FROM request_stats{where}",
+        params,
+    ).fetchall():
+        ttft, dec = samples.setdefault((r[0] or "", bool(r[1])), ([], []))
+        if r[2] is not None:
+            ttft.append(r[2])
+        if r[3] is not None:
+            dec.append(r[3])
+
+    def block(key: tuple[str, bool]) -> dict[str, Any] | None:
+        agg = groups.get(key)
+        if agg is None:
+            return None
+        ttft, dec = samples.get(key, ([], []))
+        counts = counts_block(agg)
+        return {
+            **counts,
+            **rates_block(agg),
+            "generated_avg": _ratio(counts["generated_tokens"], counts["requests"]),
+            "ttft_p50_ms": percentile(ttft, 50),
+            "decode_tps_p50": percentile(dec, 50),
+        }
+
+    names = sorted({name for name, _ in groups})
+    return {
+        "range": range_,
+        "model": model,
+        "window_start_ms": _window_start(conn, model) if range_ == "all" else start,
+        "per_model": [
+            {"model": name or None, "plain": block((name, False)), "projected": block((name, True))}
+            for name in names
+        ],
+    }
 
 
 # Prompt-size bands for like-for-like hit/miss TTFT comparison: medians are

@@ -9,6 +9,16 @@ from typing import overload
 from urllib.parse import urlsplit
 
 
+def _optional_int_env(name: str) -> int | None:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        raise ValueError(f"{name} must be an integer") from None
+
+
 def _int_env(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, str(default)))
@@ -47,6 +57,11 @@ class Settings:
     database_path: str = "./data/gufo-dashboard.sqlite"
     dashboard_host: str = "0.0.0.0"
     dashboard_port: int = 8081
+    # Second listener whose chat completions default to "projection": true.
+    projection_port: int | None = None
+    # Appended to model ids listed on the projection port, and stripped from
+    # requests there, so clients show the two ports as different models.
+    projection_model_suffix: str = "-projection"
     dashboard_allowed_hosts: tuple[str, ...] = ("localhost",)
     capture_content: bool = False
     content_retention_days: int = 7
@@ -70,6 +85,17 @@ class Settings:
             raise ValueError("GUFO_BASE_URL must be an http:// or https:// URL") from None
         if not 1 <= self.dashboard_port <= 65535:
             raise ValueError("DASHBOARD_PORT must be between 1 and 65535")
+        if self.projection_port is not None:
+            if not 1 <= self.projection_port <= 65535:
+                raise ValueError("PROJECTION_PORT must be between 1 and 65535")
+            if self.projection_port == self.dashboard_port:
+                raise ValueError("PROJECTION_PORT must differ from DASHBOARD_PORT")
+        if len(self.projection_model_suffix) > 64 or any(
+            c in self.projection_model_suffix for c in "/?# \t\r\n"
+        ):
+            raise ValueError(
+                "PROJECTION_MODEL_SUFFIX must be at most 64 characters without spaces, /, ? or #"
+            )
         for name, value in (
             ("RETENTION_DAYS", self.retention_days),
             ("CONTENT_RETENTION_DAYS", self.content_retention_days),
@@ -106,6 +132,10 @@ class Settings:
             database_path=env.get("DATABASE_PATH", cls.database_path),
             dashboard_host=env.get("DASHBOARD_HOST", cls.dashboard_host),
             dashboard_port=_int_env("DASHBOARD_PORT", cls.dashboard_port),
+            projection_port=_optional_int_env("PROJECTION_PORT"),
+            projection_model_suffix=env.get(
+                "PROJECTION_MODEL_SUFFIX", cls.projection_model_suffix
+            ).strip(),
             dashboard_allowed_hosts=tuple(
                 host.strip().lower().rstrip(".")
                 for host in env.get("DASHBOARD_ALLOWED_HOSTS", "localhost").split(",")

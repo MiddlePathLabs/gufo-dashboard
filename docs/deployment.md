@@ -99,6 +99,8 @@ must be 3.12 or later. CI exercises 3.12, 3.13, and 3.14.
 | `DATABASE_PATH` | `./data/gufo-dashboard.sqlite` | SQLite path; Docker sets `/data/gufo-dashboard.sqlite` |
 | `DASHBOARD_HOST` | `0.0.0.0` | Listen address; use `127.0.0.1` for local-only host-network or Python runs |
 | `DASHBOARD_PORT` | `8081` | Listen port, 1–65535 |
+| `PROJECTION_MODEL_SUFFIX` | `-projection` | Appended to model ids listed on the projection port and stripped from requests there; empty lists the plain ids. At most 64 characters, no spaces, `/`, `?` or `#` |
+| `PROJECTION_PORT` | empty (off) | Optional second listen port whose Chat Completions default to `"projection": true`; must differ from `DASHBOARD_PORT`. See the README's projection port section |
 | `DASHBOARD_ALLOWED_HOSTS` | `localhost` | Comma-separated exact hostnames accepted in requests; IP literals are always accepted |
 | `CAPTURE_CONTENT` | `false` | Opt-in latest-user/visible-answer text capture; restart to change |
 | `CONTENT_RETENTION_DAYS` | `7` | Positive text retention window, independent of metrics |
@@ -204,7 +206,8 @@ rebuild the image or sync the locked Python environment. Run one application
 process per database. Gufo 0.4.0 is flagged "DO NOT USE" upstream because of a
 tool-calling regression fixed in 0.5.0; run Gufo 0.5.0 or later (0.18.0 is the
 verified version). On startup, schema version 2 adds the content table to
-version-1 databases while preserving existing statistics. No previous transcript
+version-1 databases, and version 3 adds the nullable `projection` column to
+`request_stats`, both while preserving existing statistics. No previous transcript
 text is reconstructed. Startup rejects unsupported schema versions or missing
 required columns before changing the schema. Back up the database and use a
 compatible release or a new `DATABASE_PATH` if this check fails. Do not edit the

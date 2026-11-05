@@ -116,6 +116,13 @@ def status(request: Request) -> dict[str, Any]:
             "retention_days": ctx.settings.content_retention_days,
             "max_bytes": ctx.settings.content_max_bytes,
         },
+        "listener": {
+            # Which socket served this request: the page shows it so the two
+            # ports never look alike.
+            "projection": bool(request.scope.get("state", {}).get("projection_port")),
+            "dashboard_port": ctx.settings.dashboard_port,
+            "projection_port": ctx.settings.projection_port,
+        },
         "retention_days": ctx.settings.retention_days,
         "poll_interval_seconds": ctx.settings.poll_interval_seconds,
         "now_ms": now,
@@ -158,7 +165,9 @@ def activity(
     before: str | None = Query(None, pattern=r"^\d+:(request|event):\d+$"),
     after: str | None = Query(None, pattern=r"^\d+:(request|event):\d+$"),
     model: str | None = ModelQ,
-    filter: str = Query("all", pattern="^(all|errors|vision|streaming|cancelled|content|partial)$"),
+    filter: str = Query(
+        "all", pattern="^(all|errors|vision|streaming|projection|cancelled|content|partial)$"
+    ),
 ) -> dict[str, Any]:
     if before and after:
         raise HTTPException(400, "use either before or after")
@@ -233,6 +242,12 @@ def speculative(
 def cache(request: Request, range: str = RangeQ, model: str | None = ModelQ) -> dict[str, Any]:
     with _read(request) as conn:
         return stats.cache(conn, range, _model(model), now_ms())
+
+
+@router.get("/projection")
+def projection(request: Request, range: str = RangeQ, model: str | None = ModelQ) -> dict[str, Any]:
+    with _read(request) as conn:
+        return stats.projection(conn, range, _model(model), now_ms())
 
 
 @router.get("/events")

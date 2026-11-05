@@ -36,7 +36,7 @@ def test_custom_bucket_and_version(dash: Dash) -> None:
         assert client.get("/api/status").json()["version"] == version.dashboard_version()
 
 
-@pytest.mark.parametrize("schema_version", [0, 3, 999])
+@pytest.mark.parametrize("schema_version", [0, 4, 999])
 def test_unknown_schema_rejected_without_ddl(tmp_path: Path, schema_version: int) -> None:
     path = str(tmp_path / "db.sqlite")
     db.init_db(path)
@@ -75,8 +75,34 @@ def test_supported_upgrade_preserves_statistics(tmp_path: Path) -> None:
     db.init_db(path)
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT model FROM request_stats").fetchone()[0] == "preserved"
-        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 2
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
         assert conn.execute("SELECT COUNT(*) FROM request_content").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("old_version", [1, 2])
+def test_upgrade_adds_projection_column(tmp_path: Path, old_version: int) -> None:
+    path = str(tmp_path / "db.sqlite")
+    db.init_db(path)
+    with sqlite3.connect(path) as conn:
+        conn.execute("ALTER TABLE request_stats DROP COLUMN projection")
+        conn.execute("INSERT INTO request_stats (model, completed_at_ms) VALUES ('preserved', 1)")
+        conn.execute("UPDATE schema_version SET version=?", (old_version,))
+    db.init_db(path)
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+        assert conn.execute("SELECT model, projection FROM request_stats").fetchone() == (
+            "preserved",
+            None,
+        )
+
+
+def test_v3_without_projection_column_rejected(tmp_path: Path) -> None:
+    path = str(tmp_path / "db.sqlite")
+    db.init_db(path)
+    with sqlite3.connect(path) as conn:
+        conn.execute("ALTER TABLE request_stats DROP COLUMN projection")
+    with pytest.raises(RuntimeError, match="request_stats is missing projection"):
+        db.init_db(path)
 
 
 @pytest.mark.parametrize(
@@ -85,6 +111,10 @@ def test_supported_upgrade_preserves_statistics(tmp_path: Path) -> None:
         ("DASHBOARD_PORT", "oops"),
         ("DASHBOARD_PORT", "0"),
         ("DASHBOARD_PORT", "65536"),
+        ("PROJECTION_PORT", "oops"),
+        ("PROJECTION_PORT", "0"),
+        ("PROJECTION_PORT", "8081"),
+        ("PROJECTION_MODEL_SUFFIX", "a/b"),
         ("RETENTION_DAYS", "-1"),
         ("CONTENT_RETENTION_DAYS", "0"),
         ("CONTENT_MAX_BYTES", "1048577"),

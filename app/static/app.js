@@ -138,19 +138,49 @@
   // ------------------------------------------------------------------ header
   const proxyUrl = `${location.protocol}//${location.host}/v1`;
   $("proxy-url").textContent = proxyUrl;
-  $("copy-url").addEventListener("click", async () => {
-    const btn = $("copy-url");
+  document.querySelectorAll("[data-copy]").forEach((btn) => btn.addEventListener("click", async () => {
+    const text = $(btn.dataset.copy).textContent;
     try {
-      await navigator.clipboard.writeText(proxyUrl);
+      await navigator.clipboard.writeText(text);
     } catch {
       const ta = document.createElement("textarea");
-      ta.value = proxyUrl; document.body.appendChild(ta); ta.select();
+      ta.value = text; document.body.appendChild(ta); ta.select();
       try { document.execCommand("copy"); } catch { /* ignore */ }
       ta.remove();
     }
     btn.classList.add("copied");
     setTimeout(() => btn.classList.remove("copied"), 1200);
-  });
+  }));
+
+  // Both listeners serve this page from one database: label which one this
+  // is, and offer the other's URL, so :8081 and :8082 never look alike.
+  let listenerKey = "";
+  function renderListener(l) {
+    const key = JSON.stringify(l || {});
+    if (key === listenerKey) return;
+    listenerKey = key;
+    const projected = !!l?.projection;
+    const other = projected ? l.dashboard_port : l?.projection_port;
+    document.body.classList.toggle("on-projection", projected);
+    $("port-badge").hidden = !projected;
+    $("proxy-kind").hidden = !l?.projection_port;
+    $("proxy-kind").textContent = projected ? "projection" : "plain";
+    $("proxy-url-wrap").title = projected
+      ? "Chat completions sent here get \"projection\": true unless they set the field. Other generation endpoints are refused on this port."
+      : "Point clients here instead of :8080. Requests are forwarded unchanged.";
+    $("alt-url-wrap").hidden = !other;
+    if (other) {
+      $("alt-kind").textContent = projected ? "plain" : "projection";
+      $("alt-url").textContent = `${location.protocol}//${location.hostname}:${other}/v1`;
+      $("alt-url-wrap").classList.toggle("proj", !projected);
+      $("alt-url-wrap").title = projected
+        ? "The main port: requests are forwarded unchanged."
+        : "The projection port: chat completions sent there get \"projection\": true. Its stats appear here too.";
+    }
+    document.title = projected ? `Gufo Dashboard · Projection :${location.port}` : "Gufo Dashboard";
+    const fill = projected ? "%23c08cff" : "%236aa9ff";
+    $("favicon").href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='9' width='3' height='6' fill='${fill}'/%3E%3Crect x='6.5' y='5' width='3' height='10' fill='${fill}'/%3E%3Crect x='12' y='1' width='3' height='14' fill='${fill}'/%3E%3C/svg%3E`;
+  }
 
   function renderStatus(s) {
     const dot = $("status-dot");
@@ -162,6 +192,7 @@
     $("gufo-version").textContent = s.gufo_version || DASH;
     $("cur-ctx").textContent = isNum(s.context_length) ? fInt(s.context_length) : DASH;
     $("ready-for").textContent = isNum(s.observed_ready_ms) ? fDur(s.observed_ready_ms) : DASH;
+    renderListener(s.listener);
 
     const inf = s.in_flight || { count: 0, items: [] };
     const scoped = state.model ? (inf.per_model?.[state.model] || 0) : inf.count;
@@ -226,6 +257,7 @@
     "Error code": "Validated upstream or proxy error identifier. Raw upstream error messages are not stored.",
     "Finish reason": "Why generation ended, such as stop, length, or client_cancelled. Responses API entries can include terminal status and incomplete reason.",
     "Streaming": "Whether this request requested a streamed response rather than one buffered response.",
+    "Projection": "Whether the forwarded request set Gufo's runtime residual projection (\"projection\": true). Requests on the dashboard's projection port get it added unless they set the field themselves. Unset means the server default applied.",
     "Vision / images": "Whether image inputs were detected in the request and how many image references were counted. This does not measure image tokens or prove the model accepted the images.",
     "TTFT source": "gufo means server-reported time to first token; proxy_stream means proxy-measured first non-empty streamed text or reasoning delta. Missing means no TTFT measurement was available.",
     "Prompt": "Reported total input tokens for this request, including cached tokens.",
@@ -495,7 +527,7 @@
   setupTabs("chart-tabs", "metric", "metric", renderSecondary);
 
   // ---------------------------------------------------------------- insights
-  let spec = null, cache = null;
+  let spec = null, cache = null, projection = null;
   function kvRows(rows) {
     return `<table class="kvt">${rows.map(([k, v, title]) => {
       const help = title || statHelp(k);
@@ -552,6 +584,31 @@
       + (events.length ? '<h3 class="insight-subhead">RECENT CACHE PRESSURE EVENTS</h3>' + kvRows(events) : '');
   }
 
+  function projectionView() {
+    if (!projection) return "";
+    const port = state.status?.listener?.projection_port;
+    const list = projection.per_model.filter((m) => m.projected);
+    if (!list.length) {
+      return `<p class="note">No projected requests in this range.${port ? ` Send chat completions to <code>${esc(`${location.protocol}//${location.hostname}:${port}/v1`)}</code> to compare.` : " Set PROJECTION_PORT to open a projection port."}</p>`;
+    }
+    const rows = [
+      ["Requests", (b) => fInt(b.requests), "Recorded requests in the selected range."],
+      ["Error rate", (b) => fPct(b.error_rate), "Share of requests with an HTTP error or error code."],
+      ["Weighted decode tok/s", (b) => fTps(b.decode_tps_weighted), statHelp("Weighted decode tok/s")],
+      ["Decode tok/s p50", (b) => fTps(b.decode_tps_p50), "Median of per-request decode rates."],
+      ["Weighted prefill tok/s", (b) => fTps(b.prefill_tps_weighted), "1000 × summed prefilled tokens / summed prefill milliseconds."],
+      ["TTFT p50", (b) => fMs(b.ttft_p50_ms), statHelp("TTFT")],
+      ["Draft acceptance", (b) => fPct(b.draft_acceptance), "Σ accepted / Σ drafted tokens."],
+      ["Cache hit rate", (b) => fPct(b.cache_hit_rate), "Hits / requests with cache data. Gufo keeps projected and plain prompt caches apart, so a prompt cached in one state misses in the other."],
+      ["Avg generated tokens", (b) => fTps(b.generated_avg), "Generated tokens per request, including reasoning."],
+    ];
+    const cell = (b, f) => (b ? f(b) : DASH);
+    return list.map((m) => modelHead(m.model, list.length > 1)
+      + `<table class="bands compare"><thead><tr><th scope="col"></th><th scope="col">plain</th><th scope="col" class="proj">projected</th></tr></thead><tbody>`
+      + rows.map(([k, f, help]) => `<tr title="${esc(help + " A dash means unavailable, not zero.")}"><td>${esc(k)}</td><td>${cell(m.plain, f)}</td><td class="proj">${cell(m.projected, f)}</td></tr>`).join("")
+      + `</tbody></table>`).join("")
+      + `<p class="note">Projected = the forwarded body set "projection": true (the projection port adds it); plain = unset or false. Both ports record into these stats; the cards and charts above combine them.${state.range === "all" ? " All time covers retained rows only." : ""}</p>`;
+  }
   function renderInsights() {
     const body = $("insight-body");
     if (state.insight === "spec") {
@@ -565,6 +622,8 @@
         ["Requests with draft stats", `n=${fInt(m.draft_requests)}/${fInt(m.requests)}`],
         ["Weighted decode tok/s", fTps(m.decode_tps_weighted)],
       ])).join("") + `<p class="note">Acceptance = Σ accepted / Σ drafted, per model.</p>`;
+    } else if (state.insight === "projection") {
+      body.innerHTML = projectionView();
     } else if (state.insight === "cache") {
       if (!cache) { body.innerHTML = ""; return; }
       const list = cache.per_model;
@@ -650,6 +709,7 @@
     const badges = [];
     if (it.is_streaming) badges.push(`<span class="badge" ${helpTitle("Streaming")}>STREAM</span>`);
     if (it.is_vision) badges.push(`<span class="badge" title="${esc(statHelp("Vision / images"))} ${esc(it.image_count)} image(s).">VISION</span>`);
+    if (it.projection === 1) badges.push(`<span class="badge proj" ${helpTitle("Projection")}>PROJ</span>`);
     // A hit can reuse only part of a prompt: show how much when both counts exist.
     const hitShare = isNum(it.cached_tokens) && isNum(it.prompt_tokens) && it.prompt_tokens > 0
       ? Math.round((100 * it.cached_tokens) / it.prompt_tokens) : null;
@@ -925,7 +985,7 @@
     const hitTxt = r.cache_hit === true ? `<span class="badge hit">HIT</span>` : r.cache_hit === false ? `<span class="badge miss">MISS</span>` : DASH;
     $("detail-body").innerHTML = `
       <div class="status-line"><span class="mono" title="API endpoint used by this request.">${esc(r.endpoint)}</span><span ${helpTitle("HTTP status")}>HTTP ${fInt(r.http_status)}</span>
-        ${r.is_streaming ? `<span class="badge" ${helpTitle("Streaming")}>STREAM</span>` : ""}${r.is_vision ? `<span class="badge" ${helpTitle("Vision / images")}>VISION ×${esc(r.image_count)}</span>` : ""}
+        ${r.is_streaming ? `<span class="badge" ${helpTitle("Streaming")}>STREAM</span>` : ""}${r.is_vision ? `<span class="badge" ${helpTitle("Vision / images")}>VISION ×${esc(r.image_count)}</span>` : ""}${r.projection === true ? `<span class="badge proj" ${helpTitle("Projection")}>PROJ</span>` : ""}
         <span class="muted" title="Time when the proxy received this request.">${fDateTime(r.started_at_ms)}</span></div>
       ${timelineHtml(r)}
       <div class="detail-grid">
@@ -934,7 +994,8 @@
           ["Model", `<span class="mono">${esc(r.model || DASH)}</span>`],
           ["HTTP status", fInt(r.http_status)], ["Error code", esc(r.error_code || DASH)],
           ["Finish reason", esc(r.finish_reason || DASH)], ["Streaming", r.is_streaming ? "Yes" : "No"],
-          ["Vision / images", r.is_vision ? `Yes / ${fInt(r.image_count)}` : "No"], ["TTFT source", esc(r.ttft_source || DASH)]])}
+          ["Vision / images", r.is_vision ? `Yes / ${fInt(r.image_count)}` : "No"],
+          ["Projection", r.projection === true ? "On" : r.projection === false ? "Off" : "Unset"], ["TTFT source", esc(r.ttft_source || DASH)]])}
         ${section("Tokens", [
           ["Prompt", fInt(r.prompt_tokens)], ["Cached", fInt(r.cached_tokens)], ["Prefilled", fInt(r.prefill_tokens)],
           ["Generated", fInt(r.completion_tokens)], ["Reasoning", fInt(r.reasoning_tokens)]], promptBar(r) + ctx)}
@@ -1038,18 +1099,20 @@
   async function refreshData() {
     const generation = ++state.dataGeneration;
     const q = qs();
-    const [s, ts, sp, ca] = await Promise.allSettled([
+    const [s, ts, sp, ca, pr] = await Promise.allSettled([
       api("/api/summary?" + q),
       api("/api/timeseries?" + qs({ bucket: "auto" })),
       api("/api/speculative?" + q),
       api("/api/cache?" + q),
+      api("/api/projection?" + q),
     ]);
     if (generation !== state.dataGeneration || q !== qs()) return;
     if (s.status === "fulfilled") { state.summary = s.value; renderCards(s.value); }
     if (ts.status === "fulfilled") renderCharts(ts.value);
     if (sp.status === "fulfilled") spec = sp.value;
     if (ca.status === "fulfilled") cache = ca.value;
-    if ([s, ts, sp, ca].every((result) => result.status === "fulfilled")) state.lastUpdated = Date.now();
+    if (pr.status === "fulfilled") projection = pr.value;
+    if ([s, ts, sp, ca, pr].every((result) => result.status === "fulfilled")) state.lastUpdated = Date.now();
     renderInsights();
     renderFreshness();
   }

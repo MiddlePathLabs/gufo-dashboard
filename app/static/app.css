@@ -15,6 +15,8 @@
   --bad: #f85149;
   --series-2: #c3cbd6;
   --series-3: #8a7cf0;
+  --proj: #c08cff;
+  --proj-dim: rgba(192, 140, 255, 0.16);
 
   --gap: 12px;
   --pad: 12px;
@@ -50,11 +52,21 @@ button { font: inherit; color: inherit; }
   padding: 14px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
   position: relative; z-index: 5;
 }
-.brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.brand { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
 .title { margin: 0; font-weight: 650; color: var(--text-strong); font-size: 16px; }
 .proxy-url { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px;
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
 .proxy-url code { color: var(--text); }
+.url-kind { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.proxy-url.proj { border-color: rgba(192, 140, 255, 0.45); }
+.proxy-url.proj .url-kind { color: var(--proj); }
+.port-badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px;
+  background: var(--proj); color: #1a1024; font-size: var(--fs-small); font-weight: 750; letter-spacing: .03em; text-transform: uppercase; }
+body.on-projection .topbar { box-shadow: inset 0 3px 0 var(--proj); }
+body.on-projection #proxy-url-wrap { border-color: var(--proj); background: var(--proj-dim); }
+body.on-projection #proxy-kind { color: var(--proj); }
+.badge.proj { border-color: rgba(192, 140, 255, 0.5); color: var(--proj); }
+table.compare td.proj, table.compare th.proj { color: var(--proj); }
 .icon-btn { background: none; border: 0; padding: 3px; cursor: pointer; color: var(--muted); display: inline-flex; border-radius: 4px; }
 .icon-btn:hover { color: var(--text-strong); background: var(--panel-2); }
 .icon-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; }
