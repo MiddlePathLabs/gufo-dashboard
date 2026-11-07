@@ -27,6 +27,7 @@
     lastUpdated: null,
     refreshErrors: new Set(),
     dataGeneration: 0,
+    updatingSelection: false,
   };
 
   // ------------------------------------------------------------------ utils
@@ -101,7 +102,7 @@
   function renderFreshness() {
     const failed = state.refreshErrors.size > 0;
     const age = state.lastUpdated ? `Updated ${fDur(Date.now() - state.lastUpdated)} ago` : "Waiting for data";
-    $("refresh-text").textContent = state.paused ? `Paused · ${age}` : failed ? `Refresh failed · ${age}` : age;
+    $("refresh-text").textContent = state.updatingSelection ? `Updating selection · ${age}` : state.paused ? `Paused · ${age}` : failed ? `Refresh failed · ${age}` : age;
     $("refresh-text").classList.toggle("warn", failed || state.paused);
     $("retry-refresh").hidden = !failed;
     refreshInd.classList.toggle("err", failed);
@@ -194,7 +195,7 @@
     const dot = $("status-dot");
     dot.className = "dot " + (s.online ? "dot-ok" : "dot-bad");
     $("status-text").textContent = s.online ? "online" : "offline";
-    $("status-text").className = s.online ? "" : "muted";
+    $("status-text").className = s.online ? "" : "status-down";
     $("cur-model").textContent = s.model || DASH;
     $("cur-model").title = s.model || "";
     $("gufo-version").textContent = s.gufo_version || DASH;
@@ -362,8 +363,7 @@
 
   function renderCards(s) {
     setCard("requests", fInt(s.requests), `${fInt(s.streaming)} stream · ${fInt(s.vision)} vision`);
-    const errCls = s.errors > 0 ? "bad" : "";
-    setCard("errors", s.requests ? fPct(s.error_rate) : DASH, `${fInt(s.errors)} errors · ${fInt(s.cancelled)} cancelled`, errCls);
+    setCard("errors", s.requests ? fPct(s.error_rate) : DASH, `${fInt(s.errors)} errors · ${fInt(s.cancelled)} cancelled`);
     setCard("gen", fCompact(s.generated_tokens), `reasoning ${fCompact(s.reasoning_tokens)}`);
     setCard("prompt", fCompact(s.prompt_tokens), `cached ${fCompact(s.cached_tokens)}`);
 
@@ -402,7 +402,7 @@
   Chart.defaults.color = cv("--muted");
   Chart.defaults.font.family = cv("--sans");
   Chart.defaults.font.size = 11;
-  Chart.defaults.borderColor = "rgba(152,163,179,.10)";
+  Chart.defaults.borderColor = cv("--chart-grid");
   Chart.defaults.animation = false;
 
   let lastSpan = 3600000;
@@ -415,8 +415,8 @@
 
   const primary = new Chart($("chart-primary"), {
     data: { datasets: [
-      { type: "bar", label: "requests", data: [], yAxisID: "y", backgroundColor: "rgba(106,169,255,0.45)", borderWidth: 0, barPercentage: 1, categoryPercentage: 0.9 },
-      { type: "line", label: "generated tokens", data: [], yAxisID: "y1", borderColor: cv("--series-2"), backgroundColor: cv("--series-2"), borderWidth: 2, pointRadius: 1.5, tension: 0.2, spanGaps: true },
+      { type: "bar", label: "requests", data: [], yAxisID: "y", backgroundColor: cv("--chart-bar"), borderWidth: 0, barPercentage: 1, categoryPercentage: 0.9 },
+      { type: "line", label: "generated tokens", data: [], yAxisID: "y1", borderColor: cv("--series-2"), backgroundColor: cv("--series-2"), borderWidth: 2, pointRadius: 1.5, tension: 0.2, spanGaps: false },
     ] },
     options: {
       maintainAspectRatio: false,
@@ -426,8 +426,8 @@
       } } },
       scales: {
         x: timeAxis(),
-        y: { beginAtZero: true, ticks: { precision: 0, maxTicksLimit: 5 }, title: { display: false } },
-        y1: { beginAtZero: true, position: "right", grid: { display: false }, ticks: { maxTicksLimit: 5, callback: (v) => fCompact(v) } },
+        y: { beginAtZero: true, ticks: { precision: 0, maxTicksLimit: 5 }, title: { display: true, text: "Requests" } },
+        y1: { beginAtZero: true, position: "right", grid: { display: false }, ticks: { maxTicksLimit: 5, callback: (v) => fCompact(v) }, title: { display: true, text: "Tokens" } },
       },
     },
   });
@@ -453,6 +453,39 @@
       scales: { x: timeAxis(), y: { beginAtZero: true, ticks: { maxTicksLimit: 5 } } },
     },
   });
+
+  const themeToggle = $("theme-toggle");
+  function renderThemeToggle() {
+    const light = document.documentElement.dataset.theme === "light";
+    themeToggle.textContent = light ? "Dark mode" : "Light mode";
+    themeToggle.setAttribute("aria-label", `Switch to ${light ? "dark" : "light"} mode`);
+  }
+  function refreshChartTheme() {
+    Chart.defaults.color = cv("--muted");
+    Chart.defaults.borderColor = cv("--chart-grid");
+    ["--accent", "--series-2", "--series-3", "--warn", "--ok"].forEach((token, i) => { SERIES[i] = cv(token); });
+    primary.data.datasets[0].backgroundColor = cv("--chart-bar");
+    primary.data.datasets[1].borderColor = SERIES[1];
+    primary.data.datasets[1].backgroundColor = SERIES[1];
+    for (const chart of [primary, secondary]) {
+      for (const axis of Object.values(chart.options.scales)) {
+        axis.ticks.color = cv("--muted");
+        axis.grid ||= {};
+        if (axis.grid.display !== false) axis.grid.color = cv("--chart-grid");
+        if (axis.title) axis.title.color = cv("--muted");
+      }
+      chart.update();
+    }
+    renderSecondary();
+  }
+  themeToggle.addEventListener("click", () => {
+    const theme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    store.set("theme", theme);
+    renderThemeToggle();
+    refreshChartTheme();
+  });
+  renderThemeToggle();
 
   let lastTs = null;
   function renderCharts(ts) {
@@ -840,11 +873,16 @@
     feedList.querySelector(`.feed-row[data-id="${reqs[idx].id}"]`)?.scrollIntoView({ block: "nearest" });
   });
   setupTabs("feed-filter", "filter", "filter", resetFeed);
+  $("errors-card").addEventListener("click", () => {
+    $("feed-filter").querySelector('[data-filter="errors"]').click();
+    document.querySelector(".feed").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   // ------------------------------------------------------------------ detail
   const detail = $("detail");
   function closeDetail(returnFocus = true) {
     state.selectedId = null;
+    detail.hidden = true;
     $("detail-tabs").hidden = true;
     $("content-body").hidden = true;
     $("content-body").replaceChildren();
@@ -861,6 +899,8 @@
   });
   async function select(id) {
     state.selectedId = id;
+    detail.hidden = false;
+    if (matchMedia("(max-width: 900px)").matches) detail.scrollIntoView({ behavior: "smooth", block: "start" });
     $("detail-tabs").hidden = false;
     setDetailView("metrics");
     feedList.querySelectorAll(".feed-row[data-id]").forEach((r) => {
@@ -1029,10 +1069,13 @@
   // --------------------------------------------------------------- controls
   function setupRange() {
     const box = $("range");
-    const sync = () => box.querySelectorAll("button").forEach((b) => {
-      const on = b.dataset.range === state.range;
-      b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
-    });
+    const sync = () => {
+      box.querySelectorAll("button").forEach((b) => {
+        const on = b.dataset.range === state.range;
+        b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+      });
+      $("period-context").textContent = `In flight live · metrics ${state.range === "all" ? "all time" : state.range}`;
+    };
     box.addEventListener("click", (e) => {
       const b = e.target.closest("button");
       if (!b) return;
@@ -1080,16 +1123,10 @@
   // ---------------------------------------------------------------- refresh
   function resetData() {
     state.dataGeneration++;
-    state.summary = null;
-    state.lastUpdated = null;
-    spec = null; cache = null; lastTs = null;
-    for (const key of ["requests", "errors", "gen", "prompt", "decode", "prefill", "ttft", "cache", "draft"]) setCard(key, DASH, "", "na");
-    $("c-ttft").parentElement.querySelector(".label").textContent = "TTFT p50";
+    state.updatingSelection = true;
+    document.querySelector("main").classList.add("data-stale");
+    document.querySelector("main").setAttribute("aria-busy", "true");
     $("model-hint").hidden = !!state.model;
-    primary.data.datasets.forEach((d) => { d.data = []; }); primary.update();
-    secondary.data.datasets = []; secondary.update();
-    $("secondary-legend").textContent = "";
-    $("insight-body").innerHTML = `<p class="note">Loading metrics…</p>`;
     renderFreshness();
   }
   async function refreshStatus() {
@@ -1120,7 +1157,11 @@
     if (sp.status === "fulfilled") spec = sp.value;
     if (ca.status === "fulfilled") cache = ca.value;
     if (pr.status === "fulfilled") projection = pr.value;
-    if ([s, ts, sp, ca, pr].every((result) => result.status === "fulfilled")) state.lastUpdated = Date.now();
+    const complete = [s, ts, sp, ca, pr].every((result) => result.status === "fulfilled");
+    if (complete) state.lastUpdated = Date.now();
+    state.updatingSelection = false;
+    document.querySelector("main").classList.toggle("data-stale", !complete);
+    document.querySelector("main").setAttribute("aria-busy", String(!complete));
     renderInsights();
     renderFreshness();
   }

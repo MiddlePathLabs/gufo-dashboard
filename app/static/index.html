@@ -6,6 +6,7 @@
 <title>Gufo Dashboard</title>
 <link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='9' width='3' height='6' fill='%236aa9ff'/%3E%3Crect x='6.5' y='5' width='3' height='10' fill='%236aa9ff'/%3E%3Crect x='12' y='1' width='3' height='14' fill='%236aa9ff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/app.css">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("gd.theme") === "light" ? "light" : "dark"; } catch { document.documentElement.dataset.theme = "dark"; }</script>
 </head>
 <body>
 <header class="topbar">
@@ -36,6 +37,7 @@
     <span class="kv"><span class="k">Context</span><span id="cur-ctx" class="v num">—</span></span>
     <span class="kv" title="Time since the dashboard first saw Gufo ready after the last down / counter reset. Gufo does not report uptime."><span class="k">observed ready</span><span id="ready-for" class="v num">—</span></span>
   </div>
+  <button id="theme-toggle" class="btn theme-toggle" type="button">Light mode</button>
 </header>
 <div class="toolbar">
   <div class="controls">
@@ -62,20 +64,22 @@
 </div>
 
 <main>
+  <div class="section-heading"><h2>Monitor</h2><span id="period-context" class="muted">In flight live · metrics 24h</span></div>
   <section class="cards" id="cards" aria-label="Live health and performance">
     <div class="card" data-card="inflight"><div class="label">In flight</div><div class="value num" id="c-inflight">—</div><div class="sub" id="c-inflight-sub">&nbsp;</div></div>
-    <div class="card" data-card="decode" title="Weighted decode: 1000 × summed generated tokens / summed decode milliseconds."><div class="label">Weighted decode</div><div class="value num" id="c-decode">—</div><div class="sub" id="c-decode-sub">&nbsp;</div></div>
-    <div class="card" data-card="prefill" title="Weighted prefill: 1000 × summed prefilled tokens / summed prefill milliseconds."><div class="label">Weighted prefill</div><div class="value num" id="c-prefill">—</div><div class="sub" id="c-prefill-sub">&nbsp;</div></div>
+    <button class="card card-action" data-card="errors" id="errors-card" type="button" aria-label="Show error requests in activity"><span class="label">Error rate <span class="card-cue" aria-hidden="true">↗</span></span><span class="value num" id="c-errors">—</span><span class="sub" id="c-errors-sub">&nbsp;</span></button>
     <div class="card" data-card="ttft"><div class="label">TTFT p50</div><div class="value num" id="c-ttft">—</div><div class="sub" id="c-ttft-sub">&nbsp;</div></div>
-    <div class="card" data-card="errors"><div class="label">Error rate</div><div class="value num" id="c-errors">—</div><div class="sub" id="c-errors-sub">&nbsp;</div></div>
+    <div class="card" data-card="decode" title="Weighted decode: 1000 × summed generated tokens / summed decode milliseconds."><div class="label">Weighted decode</div><div class="value num" id="c-decode">—</div><div class="sub" id="c-decode-sub">&nbsp;</div></div>
   </section>
   <div id="model-hint" class="model-hint" hidden><span>Select a model to see throughput, first-token latency, cache hits, and draft acceptance.</span><button id="choose-model" class="btn" type="button">Choose a model</button></div>
+  <div class="section-heading"><h2>Volume &amp; efficiency</h2><span class="muted">Selected range</span></div>
   <section class="cards secondary-cards" aria-label="Volume and efficiency">
     <div class="card" data-card="requests"><div class="label">Requests</div><div class="value num" id="c-requests">—</div><div class="sub" id="c-requests-sub">&nbsp;</div></div>
     <div class="card" data-card="gen"><div class="label">Generated tokens</div><div class="value num" id="c-gen">—</div><div class="sub" id="c-gen-sub">&nbsp;</div></div>
     <div class="card" data-card="prompt"><div class="label">Prompt tokens</div><div class="value num" id="c-prompt">—</div><div class="sub" id="c-prompt-sub">&nbsp;</div></div>
     <div class="card" data-card="cache"><div class="label">Cache hit</div><div class="value num" id="c-cache">—</div><div class="sub" id="c-cache-sub">&nbsp;</div></div>
     <div class="card" data-card="draft"><div class="label">Draft acceptance</div><div class="value num" id="c-draft">—</div><div class="sub" id="c-draft-sub">&nbsp;</div></div>
+    <div class="card" data-card="prefill" title="Weighted prefill: 1000 × summed prefilled tokens / summed prefill milliseconds."><div class="label">Weighted prefill</div><div class="value num" id="c-prefill">—</div><div class="sub" id="c-prefill-sub">&nbsp;</div></div>
   </section>
 
   <section class="row-charts">
@@ -112,7 +116,7 @@
     </div>
   </section>
 
-  <section class="split">
+  <section class="split" aria-label="Recent activity and request details">
     <div class="panel feed">
       <div class="panel-head">
         <h2>Activity</h2>
@@ -131,13 +135,14 @@
       </div>
       <div class="feed-list" id="feed-list" tabindex="0" role="list" aria-label="Activity feed. Use up and down arrows to inspect requests."></div>
     </div>
-    <div class="panel detail" id="detail" role="region" aria-labelledby="detail-title">
+    <div class="panel detail" id="detail" role="region" aria-labelledby="detail-title" hidden>
       <div class="panel-head"><h2 id="detail-title">Selected request <span class="muted" id="detail-id"></span></h2><button id="close-detail" class="btn" type="button">Close</button></div>
       <div id="detail-tabs" class="seg" role="group" aria-label="Request view" hidden><button type="button" data-view="metrics" aria-pressed="true">Metrics</button><button type="button" data-view="content" aria-pressed="false">Content</button></div>
       <div id="content-body" class="detail-body" hidden></div>
       <div class="detail-body" id="detail-body"><p class="empty">Select a request in the activity feed.</p></div>
     </div>
   </section>
+
 </main>
 
 <dialog id="content-clear-dialog">
@@ -159,6 +164,6 @@
 </dialog>
 
 <script src="/static/vendor/chart.umd.min.js"></script>
-<script src="/static/app.js?v=20261105-projection-opt-in"></script>
+<script src="/static/app.js?v=20261107-monitor-themes"></script>
 </body>
 </html>
