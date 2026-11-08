@@ -26,6 +26,7 @@ from starlette.websockets import WebSocket
 from .api import router
 from .config import Settings
 from .db import StatsWriter, connect, init_db
+from .host_telemetry import HostTelemetry
 from .poller import Poller
 from .proxy import KNOWN_ROUTES, InFlightTracker, Proxy
 from .websocket_proxy import WebSocketProxy
@@ -57,6 +58,7 @@ class AppContext:
     poller: Poller
     proxy: Proxy
     websocket_proxy: WebSocketProxy
+    host_telemetry: HostTelemetry
 
 
 def _is_dashboard_path(path: str) -> bool:
@@ -247,6 +249,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
             poller,
             proxy,
             WebSocketProxy(settings.gufo_base_url, settings.upstream_connect_timeout),
+            HostTelemetry(),
         )
         writer.start()
         if settings.enable_poller:

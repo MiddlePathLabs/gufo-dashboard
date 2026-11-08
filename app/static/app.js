@@ -13,6 +13,7 @@
   };
 
   const state = {
+    view: store.get("view", "live") === "history" ? "history" : "live",
     range: store.get("range", "24h"),
     model: null, // null = not chosen yet (defaults to current model)
     filter: store.get("filter", "all"),
@@ -28,6 +29,11 @@
     refreshErrors: new Set(),
     dataGeneration: 0,
     updatingSelection: false,
+    testPending: false,
+    contextInfo: null,
+    contextRequesting: false,
+    contextError: "",
+    contextChoice: null, // size picked in the dropdown; null = follow the running size
   };
 
   // ------------------------------------------------------------------ utils
@@ -181,6 +187,8 @@
     // Projection controls only exist for operators who opened the port;
     // without it they would be empty for anyone who never uses projection.
     const enabled = !!l?.projection_port;
+    $("test-mode-wrap").hidden = !enabled;
+    $("test-mode").value = enabled && projected ? "projected" : "plain";
     for (const [box, attr, fallback] of [["insight-tabs", "tab", "spec"], ["feed-filter", "filter", "all"]]) {
       const btn = $(box).querySelector(`[data-${attr}="projection"]`);
       btn.hidden = !enabled;
@@ -202,8 +210,17 @@
     $("cur-ctx").textContent = isNum(s.context_length) ? fInt(s.context_length) : DASH;
     $("ready-for").textContent = isNum(s.observed_ready_ms) ? fDur(s.observed_ready_ms) : DASH;
     renderListener(s.listener);
+    $("live-processing").textContent = fInt(s.upstream_requests?.processing);
+    $("live-queued").textContent = fInt(s.upstream_requests?.deferred);
+    $("live-prompt-rate").textContent = isNum(s.gauges?.last_request_prefill_tps) ? `${fTps(s.gauges.last_request_prefill_tps)} tok/s` : DASH;
+    $("live-decode-rate").textContent = isNum(s.gauges?.last_request_decode_tps) ? `${fTps(s.gauges.last_request_decode_tps)} tok/s` : DASH;
+    $("test-model").textContent = s.model || "No model loaded";
+    $("test-send").disabled = state.testPending || !s.online || !s.model;
+    renderContextControls();
 
     const inf = s.in_flight || { count: 0, items: [] };
+    const active = inf.items;
+    $("live-active").innerHTML = active.length ? active.map((i) => `<div class="active-row"><span>${esc(i.model || "unknown model")} · ${esc(ENDPOINT_SHORT[i.endpoint] || i.endpoint)}${i.is_streaming ? " · stream" : ""}</span><span>${esc(i.phase || "running")} · ${fDur(i.elapsed_ms)}</span></div>`).join("") : `<p class="empty">No active proxy requests.</p>`;
     const scoped = state.model ? (inf.per_model?.[state.model] || 0) : inf.count;
     setCard("inflight", fInt(scoped), inf.items.length ? `oldest ${fDur(Math.max(...inf.items.map((i) => i.elapsed_ms)))}` : state.model && inf.count !== scoped ? `${inf.count} total` : "idle");
     const progress = inf.items.filter((i) => (!state.model || i.model === state.model) && i.phase === "prefill" && i.prompt_progress);
@@ -300,6 +317,162 @@
     "Context": "Configured maximum context tokens reported for the loaded model. This is a limit, not current memory usage.",
     "Context used": "Reported prompt plus generated tokens divided by the model's configured context length. This is a token estimate, not KV memory utilization.",
   };
+  const LIVE_HELP = {
+    engine: "Processing and queued are Gufo-wide values from /metrics. The prefill and decode gauges report the engine's latest rate and may read zero while idle. They are not selected-range averages. A dash means the engine did not provide the reading.",
+    host: "CPU and RAM come from Linux /proc. AMD GPU busy, VRAM, and GTT come from /sys/class/drm when accessible to the dashboard process. Values are current snapshots and are not stored. A dash means unavailable.",
+    active: "Requests currently open through this dashboard proxy. Traffic sent directly to Gufo is not listed here.",
+    test: "Sends one non-streaming Chat Completions request through this dashboard proxy using the current model. Projection Off sends an explicit projection:false; On sends projection:true. Either works on this page's port. The request appears in Activity. If Gufo requires a client API key, use your normal client instead.",
+  };
+  document.querySelectorAll("[data-help]").forEach((button) => button.addEventListener("click", () => {
+    $("help-heading").textContent = button.closest(".panel")?.querySelector("h2")?.textContent || "Metric help";
+    $("help-body").textContent = LIVE_HELP[button.dataset.help];
+    $("help-dialog").showModal();
+  }));
+
+  function showView(view, { refresh = true } = {}) {
+    const changed = state.view !== view;
+    state.view = view;
+    store.set("view", view);
+    $("live-view").hidden = view !== "live";
+    $("history-view").hidden = view !== "history";
+    document.querySelector(".toolbar").hidden = view !== "history";
+    document.querySelectorAll(".view-nav button").forEach((button) => {
+      const selected = button.dataset.view === view;
+      button.classList.toggle("on", selected);
+      if (selected) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    if (refresh && changed && view === "history") refreshData();
+  }
+  document.querySelectorAll(".view-nav button").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
+  showView(state.view, { refresh: false });
+
+  // 131072 -> "128K", 1048576 -> "1M"; sizes that are not whole K stay exact.
+  function contextLabel(tokens) {
+    if (!isNum(tokens) || tokens <= 0) return "Unknown";
+    if (tokens % 1048576 === 0) return `${tokens / 1048576}M`;
+    if (tokens % 1024 === 0) return `${tokens / 1024}K`;
+    return fInt(tokens);
+  }
+  const contextOption = (tokens) => {
+    const label = contextLabel(tokens);
+    return label === fInt(tokens) ? `${label} tokens` : `${label} · ${fInt(tokens)} tokens`;
+  };
+  function renderContextControls() {
+    const info = state.contextInfo;
+    $("context-controls").hidden = !info?.available;
+    if (!info?.available) return;
+    const current = info.context_tokens;
+    const label = contextLabel(current);
+    const ready = state.status?.online && state.status?.context_length === current;
+    $("context-current").textContent = info.switching || state.contextRequesting ? "Restarting…" : ready ? `${label} active` : current ? `${label} loading…` : "Gufo unavailable";
+    $("context-feedback").textContent = state.contextError || info.last_error || (current && !ready ? "Gufo is loading the model. Dashboard proxying will resume when ready." : "Switching reloads Gufo; dashboard history remains.");
+    const profiles = (Array.isArray(info.profiles) ? info.profiles : []).filter((p) => isNum(p) && p > 0);
+    const select = $("context-select");
+    // Rebuild only when the advertised list changes, so polling never resets
+    // an open dropdown.
+    const key = profiles.join(",");
+    if (select.dataset.profiles !== key) {
+      select.dataset.profiles = key;
+      select.replaceChildren(...profiles.map((p) => new Option(contextOption(p), String(p))));
+    }
+    if (!profiles.includes(state.contextChoice)) state.contextChoice = null;
+    const choice = state.contextChoice ?? (profiles.includes(current) ? current : profiles[0]);
+    if (choice !== undefined) select.value = String(choice);
+    const busy = !!info.switching || state.contextRequesting;
+    select.disabled = busy || !profiles.length;
+    $("context-apply").disabled = busy || choice === undefined || choice === current;
+  }
+
+  async function refreshContext() {
+    try {
+      state.contextInfo = await api("/api/context-profile");
+      if (state.contextError === "Context control is unavailable.") state.contextError = "";
+    } catch {
+      state.contextError = "Context control is unavailable.";
+    }
+    renderContextControls();
+  }
+
+  let requestedContext = null;
+  $("context-select").addEventListener("change", () => {
+    state.contextChoice = Number($("context-select").value);
+    renderContextControls();
+  });
+  $("context-apply").addEventListener("click", () => {
+    const value = Number($("context-select").value);
+    if (!value || state.contextRequesting || state.contextInfo?.switching || value === state.contextInfo?.context_tokens) return;
+    requestedContext = value;
+    $("context-dialog-title").textContent = `Switch Gufo to ${contextLabel(value)}?`;
+    $("context-dialog").returnValue = "";
+    $("context-dialog").showModal();
+  });
+  $("context-dialog").addEventListener("close", async () => {
+    if ($("context-dialog").returnValue !== "switch" || !requestedContext) return;
+    const value = requestedContext;
+    requestedContext = null;
+    state.contextRequesting = true;
+    state.contextError = "";
+    renderContextControls();
+    try {
+      const response = await fetch("/api/context-profile", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context_tokens: value }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+      state.contextChoice = null;
+      await refreshStatus();
+    } catch (error) {
+      state.contextError = `Switch failed: ${error.message}`;
+    } finally {
+      state.contextRequesting = false;
+      await refreshContext();
+    }
+  });
+
+  async function refreshHost() {
+    try {
+      const host = await api("/api/host-status");
+      $("live-cpu").textContent = isNum(host.cpu_pct) ? `${fTps(host.cpu_pct)}%` : DASH;
+      $("live-ram").textContent = isNum(host.memory?.used_bytes) && isNum(host.memory?.total_bytes) ? `${fBytes(host.memory.used_bytes)} / ${fBytes(host.memory.total_bytes)}` : DASH;
+      $("live-gpu").textContent = isNum(host.gpu?.busy_pct) ? `${fInt(host.gpu.busy_pct)}%` : DASH;
+      $("live-vram").textContent = isNum(host.gpu?.vram_used_bytes) && isNum(host.gpu?.vram_total_bytes) ? `${fBytes(host.gpu.vram_used_bytes)} / ${fBytes(host.gpu.vram_total_bytes)}` : DASH;
+      $("live-gtt").textContent = isNum(host.gpu?.gtt_used_bytes) && isNum(host.gpu?.gtt_total_bytes) ? `${fBytes(host.gpu.gtt_used_bytes)} / ${fBytes(host.gpu.gtt_total_bytes)}` : DASH;
+      $("host-note").textContent = host.gpu ? `AMD ${host.gpu.card} · Linux counters` : "GPU counters unavailable to this process.";
+    } catch {
+      $("host-note").textContent = "Host telemetry unavailable.";
+    }
+  }
+  $("test-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const model = state.status?.model;
+    if (!model) return;
+    const prompt = $("test-prompt").value.trim();
+    if (!prompt) return;
+    if (state.testPending) return;
+    const projected = !$("test-mode-wrap").hidden && $("test-mode").value === "projected";
+    const send = $("test-send");
+    state.testPending = true;
+    send.disabled = true;
+    $("test-result").textContent = `Waiting for Gufo · projection ${projected ? "on" : "off"}…`;
+    try {
+      const response = await fetch("/v1/chat/completions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], stream: false, max_tokens: 256, projection: projected }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || body.detail || `HTTP ${response.status}`);
+      const content = body.choices?.[0]?.message?.content;
+      $("test-result").textContent = `${projected ? "Projected" : "Plain"} response\n\n${typeof content === "string" ? content : "Gufo returned no text response."}`;
+    } catch (error) {
+      $("test-result").textContent = `${projected ? "Projected" : "Plain"} test failed: ${error.message}`;
+    } finally {
+      state.testPending = false;
+      send.disabled = !state.status?.online || !state.status?.model;
+      loadNewer().catch(() => {});
+    }
+  });
   const HELP_ALIASES = {
     "Weighted decode tok/s": "Weighted decode", "Hit rate": "Cache hit",
     "decode_tps": "Weighted decode", "prefill_tps": "Weighted prefill",
@@ -342,6 +515,37 @@
   }
   const CARD_HELP = { inflight: "In flight", decode: "Weighted decode", prefill: "Weighted prefill", ttft: "TTFT p50", errors: "Error rate", requests: "Requests", gen: "Generated tokens", prompt: "Prompt tokens", cache: "Cache hit", draft: "Draft acceptance" };
   document.querySelectorAll("[data-card]").forEach((el) => { el.title = statHelp(CARD_HELP[el.dataset.card]) + " A dash means unavailable, not zero. Performance and efficiency rates require a selected model."; });
+  for (const card of document.querySelectorAll(".card:not(button)[data-card]")) {
+    const label = CARD_HELP[card.dataset.card];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "help-btn card-help";
+    button.textContent = "?";
+    button.setAttribute("aria-label", `About ${label}`);
+    button.addEventListener("click", () => {
+      $("help-heading").textContent = label;
+      $("help-body").textContent = statHelp(label);
+      $("help-dialog").showModal();
+    });
+    card.append(button);
+  }
+  for (const [id, title, help] of [
+    ["chart-primary", "Requests & generated tokens", "Recorded requests and generated tokens over the selected range. Hover over points for values. Requests sent directly to Gufo are excluded."],
+    ["chart-secondary", "Performance over time", "The selected metric is calculated per model and time bucket. Gaps mean no usable measurements, not zero."],
+  ]) {
+    const panel = $(id).closest(".panel");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "help-btn";
+    button.textContent = "?";
+    button.setAttribute("aria-label", `About ${title}`);
+    button.addEventListener("click", () => {
+      $("help-heading").textContent = title;
+      $("help-body").textContent = help;
+      $("help-dialog").showModal();
+    });
+    panel.querySelector(".panel-head").append(button);
+  }
   document.querySelectorAll("[data-metric]").forEach((el) => { el.title = statHelp(el.dataset.metric); });
   $("cur-ctx").parentElement.title = statHelp("Context");
   $("cur-model").parentElement.title = "Model currently loaded in Gufo. Selected-range statistics can also include previously loaded models.";
@@ -1166,7 +1370,7 @@
     renderFreshness();
   }
   async function refreshAll() {
-    await Promise.allSettled([refreshStatus(), refreshModels()]);
+    await Promise.allSettled([refreshStatus(), refreshModels(), refreshHost(), refreshContext()]);
     await refreshData();
   }
 
@@ -1181,10 +1385,18 @@
   (async () => {
     try { await refreshModels(); } catch { state.model = ""; }
     await refreshStatus();
+    await refreshHost();
+    await refreshContext();
     await refreshData();
     resetFeed();
     every(STATUS_MS, refreshStatus);
-    every(DATA_MS, async () => { await refreshModels().catch(() => {}); await refreshData(); });
+    every(STATUS_MS, refreshHost);
+    every(STATUS_MS, refreshContext);
+    every(DATA_MS, async () => {
+      await refreshModels().catch(() => {});
+      // Charts and cards live in the history view; it refreshes when shown.
+      if (state.view === "history") await refreshData();
+    });
     every(FEED_MS, loadNewer);
   })();
   setInterval(renderFreshness, 1000);

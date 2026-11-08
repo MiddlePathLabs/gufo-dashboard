@@ -96,6 +96,7 @@ must be 3.12 or later. CI exercises 3.12, 3.13, and 3.14.
 | --- | --- | --- |
 | `GUFO_BASE_URL` | `http://127.0.0.1:8080` | HTTP(S) upstream base URL, without `/v1`; WebSocket connections derive WS(S) from it |
 | `GUFO_API_KEY` | Empty | Bearer token for the dashboard's own status polls only |
+| `GUFO_CONTROL_URL` | Empty | Optional loopback address of an external [context controller](context-control.md); enables the context-size dropdown. Requires host networking; not available with the bridge-network setup |
 | `DATABASE_PATH` | `./data/gufo-dashboard.sqlite` | SQLite path; Docker sets `/data/gufo-dashboard.sqlite` |
 | `DASHBOARD_HOST` | `0.0.0.0` | Listen address; use `127.0.0.1` for local-only host-network or Python runs |
 | `DASHBOARD_PORT` | `8081` | Listen port, 1–65535 |

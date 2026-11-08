@@ -39,6 +39,10 @@
   </div>
   <button id="theme-toggle" class="btn theme-toggle" type="button">Light mode</button>
 </header>
+<nav class="view-nav" aria-label="Dashboard views">
+  <button type="button" data-view="live" aria-current="page">Live operations</button>
+  <button type="button" data-view="history">Request analysis</button>
+</nav>
 <div class="toolbar">
   <div class="controls">
     <label class="select"><span>Viewing model</span>
@@ -64,6 +68,57 @@
 </div>
 
 <main>
+  <section id="live-view" class="view-stack" aria-label="Live operations">
+    <div class="section-heading"><h2>Current state</h2><span class="muted">Refreshes every 3 seconds</span></div>
+    <div class="live-grid">
+      <section class="panel live-panel" aria-labelledby="engine-heading">
+        <div class="panel-head"><h2 id="engine-heading">Engine</h2><button type="button" class="help-btn" data-help="engine" aria-label="About engine readings">?</button></div>
+        <div class="live-readings">
+          <div><span>Processing</span><strong id="live-processing">—</strong></div>
+          <div><span>Queued</span><strong id="live-queued">—</strong></div>
+          <div><span>Prefill gauge</span><strong id="live-prompt-rate">—</strong></div>
+          <div><span>Decode gauge</span><strong id="live-decode-rate">—</strong></div>
+        </div>
+        <p class="note">Engine-wide gauges include traffic sent directly to Gufo.</p>
+        <div id="context-controls" class="context-controls" hidden>
+          <div class="context-head"><strong>Context size</strong><span id="context-current" class="muted">Checking…</span></div>
+          <div class="context-options">
+            <label class="select"><span>Restart with</span><select id="context-select"></select></label>
+            <button id="context-apply" type="button" class="btn">Restart Gufo</button>
+          </div>
+          <p id="context-feedback" class="note" role="status">Switching reloads Gufo; dashboard history remains.</p>
+        </div>
+      </section>
+      <section class="panel live-panel" aria-labelledby="host-heading">
+        <div class="panel-head"><h2 id="host-heading">Host &amp; GPU</h2><button type="button" class="help-btn" data-help="host" aria-label="About host readings">?</button></div>
+        <div class="live-readings">
+          <div><span>CPU busy</span><strong id="live-cpu">—</strong></div>
+          <div><span>RAM used</span><strong id="live-ram">—</strong></div>
+          <div><span>GPU busy</span><strong id="live-gpu">—</strong></div>
+          <div><span>VRAM used</span><strong id="live-vram">—</strong></div>
+          <div><span>GTT used</span><strong id="live-gtt">—</strong></div>
+        </div>
+        <p class="note" id="host-note">Reading Linux host counters…</p>
+      </section>
+      <section class="panel live-panel live-requests" aria-labelledby="active-heading">
+        <div class="panel-head"><h2 id="active-heading">Active proxy requests</h2><button type="button" class="help-btn" data-help="active" aria-label="About active requests">?</button></div>
+        <div id="live-active" class="live-active" role="status">Waiting for status…</div>
+      </section>
+      <section class="panel live-panel test-panel" aria-labelledby="test-heading">
+        <div class="panel-head"><h2 id="test-heading">Test the current model</h2><button type="button" class="help-btn" data-help="test" aria-label="About test requests">?</button></div>
+        <form id="test-form">
+          <label for="test-prompt">Prompt</label>
+          <textarea id="test-prompt" rows="3" maxlength="4000" placeholder="Ask a short question…" required></textarea>
+          <label id="test-mode-wrap" class="test-mode" for="test-mode" hidden>Projection
+            <select id="test-mode"><option value="plain">Off · plain</option><option value="projected">On · projected</option></select>
+          </label>
+          <div class="test-actions"><span id="test-model" class="muted">No model selected</span><button id="test-send" class="btn" type="submit">Send test</button></div>
+        </form>
+        <div id="test-result" class="test-result" role="status" aria-live="polite">The response will appear here. Test requests are recorded in Activity.</div>
+      </section>
+    </div>
+  </section>
+  <div id="history-view" class="view-stack" hidden>
   <div class="section-heading"><h2>Monitor</h2><span id="period-context" class="muted">In flight live · metrics 24h</span></div>
   <section class="cards" id="cards" aria-label="Live health and performance">
     <div class="card" data-card="inflight"><div class="label">In flight</div><div class="value num" id="c-inflight">—</div><div class="sub" id="c-inflight-sub">&nbsp;</div></div>
@@ -142,8 +197,11 @@
       <div class="detail-body" id="detail-body"><p class="empty">Select a request in the activity feed.</p></div>
     </div>
   </section>
-
+  </div>
 </main>
+
+<dialog id="help-dialog"><form method="dialog"><div class="panel-head"><h2 id="help-heading">Metric help</h2><button class="btn" value="close" aria-label="Close help">Close</button></div><p id="help-body"></p></form></dialog>
+<dialog id="context-dialog"><form method="dialog"><h3 id="context-dialog-title">Switch context?</h3><p>Gufo will restart and reload the model. Active requests will stop. The dashboard and its history will stay available.</p><div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button class="btn" value="switch">Restart Gufo</button></div></form></dialog>
 
 <dialog id="content-clear-dialog">
   <form method="dialog">
@@ -164,6 +222,6 @@
 </dialog>
 
 <script src="/static/vendor/chart.umd.min.js"></script>
-<script src="/static/app.js?v=20261107-monitor-themes"></script>
+<script src="/static/app.js?v=20261107-context-profiles"></script>
 </body>
 </html>

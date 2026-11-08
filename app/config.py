@@ -53,6 +53,7 @@ def _float_env(name: str, default: float | None) -> float | None:
 class Settings:
     gufo_base_url: str = "http://127.0.0.1:8080"
     gufo_api_key: str = ""
+    gufo_control_url: str = ""
     gufo_cache_state_path: str = ""
     database_path: str = "./data/gufo-dashboard.sqlite"
     dashboard_host: str = "0.0.0.0"
@@ -83,6 +84,10 @@ class Settings:
                 raise ValueError
         except ValueError:
             raise ValueError("GUFO_BASE_URL must be an http:// or https:// URL") from None
+        if self.gufo_control_url:
+            control = urlsplit(self.gufo_control_url)
+            if control.scheme != "http" or control.hostname not in {"127.0.0.1", "localhost"}:
+                raise ValueError("GUFO_CONTROL_URL must be a loopback http:// URL")
         if not 1 <= self.dashboard_port <= 65535:
             raise ValueError("DASHBOARD_PORT must be between 1 and 65535")
         if self.projection_port is not None:
@@ -128,6 +133,7 @@ class Settings:
         return cls(
             gufo_base_url=env.get("GUFO_BASE_URL", cls.gufo_base_url).rstrip("/"),
             gufo_api_key=env.get("GUFO_API_KEY", ""),
+            gufo_control_url=env.get("GUFO_CONTROL_URL", "").rstrip("/"),
             gufo_cache_state_path=env.get("GUFO_CACHE_STATE_PATH", ""),
             database_path=env.get("DATABASE_PATH", cls.database_path),
             dashboard_host=env.get("DASHBOARD_HOST", cls.dashboard_host),

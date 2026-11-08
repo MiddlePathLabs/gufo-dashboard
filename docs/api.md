@@ -11,6 +11,9 @@ Interactive OpenAPI pages are disabled.
 | --- | --- | --- |
 | GET | `/api/health` | `{"status":"ok"}`; dashboard liveness only |
 | GET | `/api/status` | Dashboard package `version`, upstream online state, model, observed ready duration, gauges, in-flight requests, pipeline counters, content-capture settings, and unattributed-token estimate |
+| GET | `/api/host-status` | Current Linux CPU and RAM readings plus AMD GPU busy, VRAM, and GTT when available; missing readings are `null` |
+| GET | `/api/context-profile` | Available Gufo context profiles and the configured process context, when an external controller is configured |
+| POST | `/api/context-profile` | Body `{"context_tokens":65536}`; restart Gufo at one of the sizes the controller advertises in `profiles` |
 | GET | `/api/models` | `models` array and `current` model |
 | GET | `/api/summary` | `range`, `model`; counts and per-model metrics |
 | GET | `/api/timeseries` | `range`, `model`, `bucket`; timestamps, totals, and per-model series |
@@ -53,6 +56,7 @@ than assuming the requested bucket was used.
 
 ```bash
 curl http://localhost:8081/api/health
+curl http://localhost:8081/api/host-status
 curl 'http://localhost:8081/api/summary?range=24h'
 curl 'http://localhost:8081/api/activity?limit=25&filter=errors'
 ```

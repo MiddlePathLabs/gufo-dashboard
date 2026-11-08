@@ -82,6 +82,16 @@ def test_main_port_unchanged(pdash: Dash, fake: FakeGufo) -> None:
     assert pdash.wait_rows(1)[0]["projection"] is None
 
 
+@pytest.mark.parametrize(("value", "stored"), [(False, 0), (True, 1)])
+def test_main_port_respects_explicit_projection(
+    pdash: Dash, fake: FakeGufo, value: bool, stored: int
+) -> None:
+    with pdash.client() as client:
+        assert client.post("/v1/chat/completions", json={**CHAT, "projection": value}).is_success
+    assert _forwarded(fake)["projection"] is value
+    assert pdash.wait_rows(1)[0]["projection"] == stored
+
+
 @pytest.mark.parametrize(
     "path", ["/v1/responses", "/v1/messages", "/v1/completions", "/completion"]
 )
