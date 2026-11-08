@@ -168,11 +168,9 @@ class ProxiedResponse:
 
 
 def json_error(
-    status: int, message: str, code: str
+    status: int, message: str, code: str, error_type: str = "upstream_error"
 ) -> tuple[int, list[tuple[bytes, bytes]], bytes]:
-    body = json.dumps(
-        {"error": {"message": message, "type": "upstream_error", "code": code}}
-    ).encode()
+    body = json.dumps({"error": {"message": message, "type": error_type, "code": code}}).encode()
     headers = [
         (b"content-type", b"application/json"),
         (b"content-length", str(len(body)).encode()),
@@ -197,6 +195,7 @@ class Proxy:
         *,
         capture_content: bool = False,
         content_max_bytes: int = 64 * 1024,
+        projection_model_suffix: str = "",
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.client = client
@@ -206,6 +205,7 @@ class Proxy:
         self.max_inspect = max_inspect_body_bytes
         self.capture_content = capture_content
         self.content_max_bytes = content_max_bytes
+        self.model_suffix = projection_model_suffix
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         request = Request(scope, receive)
@@ -214,14 +214,54 @@ class Proxy:
         path = request.url.path
         kind = extract.RECORDED_ENDPOINTS.get(path) if request.method == "POST" else None
         body = await request.body()
+        projection_port = scope.get("state", {}).get("projection_port", False)
+        if (
+            projection_port
+            and self.model_suffix
+            and request.method == "GET"
+            and (path == "/v1/models" or path.startswith("/v1/models/"))
+        ):
+            await self._aliased_models(request, scope, send)
+            return
+        if projection_port and kind is not None and kind not in extract.PROJECTABLE:
+            # Gufo ignores the field here: refuse rather than run unsteered.
+            await _send_simple(
+                send,
+                *json_error(
+                    400,
+                    f"The projection port only steers /v1/chat/completions; {path} "
+                    "has no per-request projection. Use the main dashboard port for it.",
+                    "projection_unsupported_endpoint",
+                    "invalid_request_error",
+                ),
+            )
+            return
 
         info: extract.RequestInfo | None = None
         if kind is not None:
             try:
-                info = extract.analyze_request(kind, body)
+                info = extract.analyze_request(
+                    kind,
+                    body,
+                    default_projection=projection_port,
+                    model_suffix=self.model_suffix if projection_port else "",
+                )
             except Exception as exc:
                 self._extraction_error(exc)
                 info = extract.RequestInfo(kind=kind, body=body)
+        if projection_port and info is not None and info.projection is None:
+            # Not a JSON object, or it could not be re-serialized with the field.
+            await _send_simple(
+                send,
+                *json_error(
+                    400,
+                    'Could not add "projection": true to this request body; '
+                    "send a JSON object or set the field yourself.",
+                    "projection_not_applied",
+                    "invalid_request_error",
+                ),
+            )
+            return
         capture = (
             ContentCapture(kind, body, self.capture_content, self.content_max_bytes)
             if kind
@@ -290,6 +330,48 @@ class Proxy:
             resp.status_code, exchange.response_headers(), exchange.chunks, exchange.close
         )(scope, receive, send)
 
+    async def _aliased_models(self, request: Request, scope: Scope, send: Send) -> None:
+        """Model listing on the projection port, with every id suffixed.
+
+        Clients then list the projection port as its own model; requests
+        naming the alias are forwarded under the served id (analyze_request).
+        """
+        path = request.url.path
+        if path.startswith("/v1/models/"):
+            served = extract.strip_model_suffix(path[len("/v1/models/") :], self.model_suffix)
+            path = "/v1/models/" + served
+        req_headers = filter_headers(
+            [(k.decode("latin-1"), v.decode("latin-1")) for k, v in request.headers.raw],
+            extra_drop=("host", "content-length", "accept-encoding"),
+        )
+        req_headers.append(("accept-encoding", "identity"))
+        url = httpx.URL(self.base_url + path, query=request.url.query.encode("latin-1"))
+        try:
+            resp = await self.client.get(url, headers=req_headers)
+        except httpx.HTTPError:
+            scope.setdefault("state", {})["gufo_log"] = {"status": 502, "route": path}
+            await _send_simple(
+                send, *json_error(502, "Gufo upstream unreachable", "upstream_unreachable")
+            )
+            return
+        content = resp.content
+        if resp.status_code == 200:
+            with contextlib.suppress(ValueError, UnicodeDecodeError):
+                obj = json.loads(content)
+                listing = isinstance(obj, dict) and obj.get("object") == "list"
+                models = obj.get("data") if listing else [obj]
+                for item in models if isinstance(models, list) else []:
+                    if isinstance(item, dict) and isinstance(item.get("id"), str):
+                        item["id"] += self.model_suffix
+                content = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode()
+        items = filter_headers(
+            list(resp.headers.multi_items()), extra_drop=("content-length", "content-encoding")
+        )
+        headers = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in items]
+        headers.append((b"content-length", str(len(content)).encode()))
+        scope.setdefault("state", {})["gufo_log"] = {"status": resp.status_code, "route": path}
+        await _send_simple(send, resp.status_code, headers, content)
+
     def _extraction_error(self, exc: BaseException) -> None:
         self.writer.counters.stats_extraction_errors += 1
         log.warning("stats extraction failed: %s", type(exc).__name__)
@@ -317,6 +399,7 @@ class Proxy:
                 request_model=info.model,
                 is_streaming=info.is_streaming,
                 image_count=info.image_count,
+                projection=info.projection,
                 http_status=status,
                 gufo_request_id=request_id,
                 started_at_ms=started,

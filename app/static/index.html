@@ -4,16 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gufo Dashboard</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='9' width='3' height='6' fill='%236aa9ff'/%3E%3Crect x='6.5' y='5' width='3' height='10' fill='%236aa9ff'/%3E%3Crect x='12' y='1' width='3' height='14' fill='%236aa9ff'/%3E%3C/svg%3E">
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='9' width='3' height='6' fill='%236aa9ff'/%3E%3Crect x='6.5' y='5' width='3' height='10' fill='%236aa9ff'/%3E%3Crect x='12' y='1' width='3' height='14' fill='%236aa9ff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/app.css">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("gd.theme") === "light" ? "light" : "dark"; } catch { document.documentElement.dataset.theme = "dark"; }</script>
 </head>
 <body>
 <header class="topbar">
   <div class="brand">
     <h1 class="title">Gufo Dashboard</h1>
-    <span class="proxy-url" title="Point clients here instead of :8080">
+    <span id="port-badge" class="port-badge" hidden title="This page was served by the projection port: chat completions sent to this address get &quot;projection&quot;: true unless they set the field themselves.">Projection port</span>
+    <span class="proxy-url" id="proxy-url-wrap" title="Point clients here instead of :8080">
+      <span class="url-kind" id="proxy-kind" hidden></span>
       <code id="proxy-url">…</code>
-      <button id="copy-url" class="icon-btn" type="button" title="Copy base URL" aria-label="Copy base URL">
+      <button id="copy-url" class="icon-btn" type="button" data-copy="proxy-url" title="Copy base URL" aria-label="Copy base URL">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+      </button>
+    </span>
+    <span class="proxy-url" id="alt-url-wrap" hidden>
+      <span class="url-kind" id="alt-kind"></span>
+      <code id="alt-url"></code>
+      <button class="icon-btn" type="button" data-copy="alt-url" title="Copy base URL" aria-label="Copy the other base URL">
         <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
       </button>
     </span>
@@ -27,7 +37,12 @@
     <span class="kv"><span class="k">Context</span><span id="cur-ctx" class="v num">—</span></span>
     <span class="kv" title="Time since the dashboard first saw Gufo ready after the last down / counter reset. Gufo does not report uptime."><span class="k">observed ready</span><span id="ready-for" class="v num">—</span></span>
   </div>
+  <button id="theme-toggle" class="btn theme-toggle" type="button">Light mode</button>
 </header>
+<nav class="view-nav" aria-label="Dashboard views">
+  <button type="button" data-view="live" aria-current="page">Live operations</button>
+  <button type="button" data-view="history">Request analysis</button>
+</nav>
 <div class="toolbar">
   <div class="controls">
     <label class="select"><span>Viewing model</span>
@@ -53,20 +68,73 @@
 </div>
 
 <main>
+  <section id="live-view" class="view-stack" aria-label="Live operations">
+    <div class="section-heading"><h2>Current state</h2><span class="muted">Refreshes every 3 seconds</span></div>
+    <div class="live-grid">
+      <section class="panel live-panel" aria-labelledby="engine-heading">
+        <div class="panel-head"><h2 id="engine-heading">Engine</h2><button type="button" class="help-btn" data-help="engine" aria-label="About engine readings">?</button></div>
+        <div class="live-readings">
+          <div><span>Processing</span><strong id="live-processing">—</strong></div>
+          <div><span>Queued</span><strong id="live-queued">—</strong></div>
+          <div><span>Prefill gauge</span><strong id="live-prompt-rate">—</strong></div>
+          <div><span>Decode gauge</span><strong id="live-decode-rate">—</strong></div>
+        </div>
+        <p class="note">Engine-wide gauges include traffic sent directly to Gufo.</p>
+        <div id="context-controls" class="context-controls" hidden>
+          <div class="context-head"><strong>Context size</strong><span id="context-current" class="muted">Checking…</span></div>
+          <div class="context-options">
+            <label class="select"><span>Restart with</span><select id="context-select"></select></label>
+            <button id="context-apply" type="button" class="btn">Restart Gufo</button>
+          </div>
+          <p id="context-feedback" class="note" role="status">Switching reloads Gufo; dashboard history remains.</p>
+        </div>
+      </section>
+      <section class="panel live-panel" aria-labelledby="host-heading">
+        <div class="panel-head"><h2 id="host-heading">Host &amp; GPU</h2><button type="button" class="help-btn" data-help="host" aria-label="About host readings">?</button></div>
+        <div class="live-readings">
+          <div><span>CPU busy</span><strong id="live-cpu">—</strong></div>
+          <div><span>RAM used</span><strong id="live-ram">—</strong></div>
+          <div><span>GPU busy</span><strong id="live-gpu">—</strong></div>
+          <div><span>VRAM used</span><strong id="live-vram">—</strong></div>
+          <div><span>GTT used</span><strong id="live-gtt">—</strong></div>
+        </div>
+        <p class="note" id="host-note">Reading Linux host counters…</p>
+      </section>
+      <section class="panel live-panel live-requests" aria-labelledby="active-heading">
+        <div class="panel-head"><h2 id="active-heading">Active proxy requests</h2><button type="button" class="help-btn" data-help="active" aria-label="About active requests">?</button></div>
+        <div id="live-active" class="live-active" role="status">Waiting for status…</div>
+      </section>
+      <section class="panel live-panel test-panel" aria-labelledby="test-heading">
+        <div class="panel-head"><h2 id="test-heading">Test the current model</h2><button type="button" class="help-btn" data-help="test" aria-label="About test requests">?</button></div>
+        <form id="test-form">
+          <label for="test-prompt">Prompt</label>
+          <textarea id="test-prompt" rows="3" maxlength="4000" placeholder="Ask a short question…" required></textarea>
+          <label id="test-mode-wrap" class="test-mode" for="test-mode" hidden>Projection
+            <select id="test-mode"><option value="plain">Off · plain</option><option value="projected">On · projected</option></select>
+          </label>
+          <div class="test-actions"><span id="test-model" class="muted">No model selected</span><button id="test-send" class="btn" type="submit">Send test</button></div>
+        </form>
+        <div id="test-result" class="test-result" role="status" aria-live="polite">The response will appear here. Test requests are recorded in Activity.</div>
+      </section>
+    </div>
+  </section>
+  <div id="history-view" class="view-stack" hidden>
+  <div class="section-heading"><h2>Monitor</h2><span id="period-context" class="muted">In flight live · metrics 24h</span></div>
   <section class="cards" id="cards" aria-label="Live health and performance">
     <div class="card" data-card="inflight"><div class="label">In flight</div><div class="value num" id="c-inflight">—</div><div class="sub" id="c-inflight-sub">&nbsp;</div></div>
-    <div class="card" data-card="decode" title="Weighted decode: 1000 × summed generated tokens / summed decode milliseconds."><div class="label">Weighted decode</div><div class="value num" id="c-decode">—</div><div class="sub" id="c-decode-sub">&nbsp;</div></div>
-    <div class="card" data-card="prefill" title="Weighted prefill: 1000 × summed prefilled tokens / summed prefill milliseconds."><div class="label">Weighted prefill</div><div class="value num" id="c-prefill">—</div><div class="sub" id="c-prefill-sub">&nbsp;</div></div>
+    <button class="card card-action" data-card="errors" id="errors-card" type="button" aria-label="Show error requests in activity"><span class="label">Error rate <span class="card-cue" aria-hidden="true">↗</span></span><span class="value num" id="c-errors">—</span><span class="sub" id="c-errors-sub">&nbsp;</span></button>
     <div class="card" data-card="ttft"><div class="label">TTFT p50</div><div class="value num" id="c-ttft">—</div><div class="sub" id="c-ttft-sub">&nbsp;</div></div>
-    <div class="card" data-card="errors"><div class="label">Error rate</div><div class="value num" id="c-errors">—</div><div class="sub" id="c-errors-sub">&nbsp;</div></div>
+    <div class="card" data-card="decode" title="Weighted decode: 1000 × summed generated tokens / summed decode milliseconds."><div class="label">Weighted decode</div><div class="value num" id="c-decode">—</div><div class="sub" id="c-decode-sub">&nbsp;</div></div>
   </section>
   <div id="model-hint" class="model-hint" hidden><span>Select a model to see throughput, first-token latency, cache hits, and draft acceptance.</span><button id="choose-model" class="btn" type="button">Choose a model</button></div>
+  <div class="section-heading"><h2>Volume &amp; efficiency</h2><span class="muted">Selected range</span></div>
   <section class="cards secondary-cards" aria-label="Volume and efficiency">
     <div class="card" data-card="requests"><div class="label">Requests</div><div class="value num" id="c-requests">—</div><div class="sub" id="c-requests-sub">&nbsp;</div></div>
     <div class="card" data-card="gen"><div class="label">Generated tokens</div><div class="value num" id="c-gen">—</div><div class="sub" id="c-gen-sub">&nbsp;</div></div>
     <div class="card" data-card="prompt"><div class="label">Prompt tokens</div><div class="value num" id="c-prompt">—</div><div class="sub" id="c-prompt-sub">&nbsp;</div></div>
     <div class="card" data-card="cache"><div class="label">Cache hit</div><div class="value num" id="c-cache">—</div><div class="sub" id="c-cache-sub">&nbsp;</div></div>
     <div class="card" data-card="draft"><div class="label">Draft acceptance</div><div class="value num" id="c-draft">—</div><div class="sub" id="c-draft-sub">&nbsp;</div></div>
+    <div class="card" data-card="prefill" title="Weighted prefill: 1000 × summed prefilled tokens / summed prefill milliseconds."><div class="label">Weighted prefill</div><div class="value num" id="c-prefill">—</div><div class="sub" id="c-prefill-sub">&nbsp;</div></div>
   </section>
 
   <section class="row-charts">
@@ -95,6 +163,7 @@
         <div class="tabs" id="insight-tabs" role="tablist">
           <button type="button" role="tab" data-tab="spec">Speculative</button>
           <button type="button" role="tab" data-tab="cache">Cache</button>
+          <button type="button" role="tab" data-tab="projection" hidden>Projection</button>
           <button type="button" role="tab" data-tab="gufo">Gufo counters</button>
         </div>
       </div>
@@ -102,7 +171,7 @@
     </div>
   </section>
 
-  <section class="split">
+  <section class="split" aria-label="Recent activity and request details">
     <div class="panel feed">
       <div class="panel-head">
         <h2>Activity</h2>
@@ -113,6 +182,7 @@
           <button type="button" data-filter="partial">Incomplete</button>
           <button type="button" data-filter="vision">Vision</button>
           <button type="button" data-filter="streaming">Streaming</button>
+          <button type="button" data-filter="projection" hidden>Projection</button>
         </div>
       </div>
       <div class="feed-head">
@@ -120,14 +190,18 @@
       </div>
       <div class="feed-list" id="feed-list" tabindex="0" role="list" aria-label="Activity feed. Use up and down arrows to inspect requests."></div>
     </div>
-    <div class="panel detail" id="detail" role="region" aria-labelledby="detail-title">
+    <div class="panel detail" id="detail" role="region" aria-labelledby="detail-title" hidden>
       <div class="panel-head"><h2 id="detail-title">Selected request <span class="muted" id="detail-id"></span></h2><button id="close-detail" class="btn" type="button">Close</button></div>
       <div id="detail-tabs" class="seg" role="group" aria-label="Request view" hidden><button type="button" data-view="metrics" aria-pressed="true">Metrics</button><button type="button" data-view="content" aria-pressed="false">Content</button></div>
       <div id="content-body" class="detail-body" hidden></div>
       <div class="detail-body" id="detail-body"><p class="empty">Select a request in the activity feed.</p></div>
     </div>
   </section>
+  </div>
 </main>
+
+<dialog id="help-dialog"><form method="dialog"><div class="panel-head"><h2 id="help-heading">Metric help</h2><button class="btn" value="close" aria-label="Close help">Close</button></div><p id="help-body"></p></form></dialog>
+<dialog id="context-dialog"><form method="dialog"><h3 id="context-dialog-title">Switch context?</h3><p>Gufo will restart and reload the model. Active requests will stop. The dashboard and its history will stay available.</p><div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button class="btn" value="switch">Restart Gufo</button></div></form></dialog>
 
 <dialog id="content-clear-dialog">
   <form method="dialog">
@@ -148,6 +222,6 @@
 </dialog>
 
 <script src="/static/vendor/chart.umd.min.js"></script>
-<script src="/static/app.js?v=20261021-cache-bands"></script>
+<script src="/static/app.js?v=20261107-context-profiles"></script>
 </body>
 </html>

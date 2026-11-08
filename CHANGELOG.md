@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- Add an optional projection port: with `PROJECTION_PORT` set (for example
+  `8082`), a second listener adds `"projection": true` to Chat Completions
+  requests that leave it out, so clients get Gufo's runtime residual
+  projection without changing their bodies; the main port is unchanged and
+  both share one Gufo server. Endpoints where Gufo ignores the field are
+  refused on that port rather than run unsteered. Requests record their
+  projection state (schema version 3 adds the column in place), with a `PROJ`
+  badge, a request-detail row and a Projection activity filter.
+- Keep projection out of sight for anyone not using it: the Projection
+  insight tab and Activity filter appear only when `PROJECTION_PORT` is set,
+  and the request detail lists projection only for requests that set the
+  field. The schema still moves to version 3 on first start (one nullable
+  column); older releases cannot open the database afterwards.
+- Give the projection port its own model ids: `/v1/models` there lists each
+  model with `PROJECTION_MODEL_SUFFIX` (default `-projection`) appended, and
+  requests naming the alias are forwarded and recorded under the served id.
+- Make the two listeners unmistakable: a page served by the projection port
+  shows a "Projection port" badge, a violet top edge, tab title and favicon,
+  and labels its base URL; each page also links the other port's URL. Both
+  ports read one database, so either shows all traffic; a new Projection
+  insight tab (`/api/projection`) compares plain and projected requests side
+  by side per model (decode and prefill rates, TTFT, draft acceptance, cache
+  hits, output length) from retained rows.
 - Show what the cache is worth, like for like: the Cache panel adds a
   "First reply by prompt size" table comparing median time to first token for
   cache hits versus misses within prompt-size bands (<1k, 1k-4k, 4k-16k,

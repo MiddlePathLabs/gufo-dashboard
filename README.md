@@ -28,6 +28,18 @@ identifiers are anonymized; these figures illustrate the interface, not a benchm
 - Stores statistics in SQLite with configurable retention and daily rollups.
 - Runs with Python or Docker. The frontend uses plain HTML, CSS, JavaScript, and
   a bundled copy of Chart.js; there is no frontend build step or CDN dependency.
+- Separates current engine and host readings from historical request analysis.
+  The Live operations view shows Gufo-wide processing and queue counts, Linux
+  CPU and RAM, and AMD GPU utilization, VRAM, and GTT when sysfs exposes them.
+  A short test prompt can be sent through the proxy and inspected in Activity.
+  When the projection listener is configured, the test form offers plain and
+  projected modes. It sends an explicit `projection` value on the current port,
+  so the choice works from either dashboard URL.
+- With an [optional host controller](docs/context-control.md), Live operations
+  offers a dropdown of the context sizes you configure for your model.
+  Changing profile restarts Gufo and interrupts active inference, while this
+  dashboard and its recorded history stay up. Stock Gufo requires an external
+  process manager for this action; the dashboard does not install one.
 
 The application stores numeric metrics and validated identifiers. Optional text
 capture adds the latest user message and visible answer for auditing. It is off
@@ -38,6 +50,8 @@ Read the [privacy reference](docs/privacy.md) for the exact boundaries.
 **Deployment scope:** trusted local machines and private networks. There is no
 built-in authentication or TLS. Anyone who can reach the service can query its
 statistics and captured text, clear history, and access Gufo through the proxy.
+When the optional context controller is enabled, they can also restart Gufo at
+any of the configured context sizes.
 The default bind address is `0.0.0.0`; use `DASHBOARD_HOST=127.0.0.1` for
 local-only access.
 
@@ -109,6 +123,40 @@ compression are negotiated independently on each side. The dashboard's
 Uvicorn server defaults to a 16 MiB inbound WebSocket message limit; larger
 client messages require changing the server's WebSocket configuration.
 
+### Projection port
+
+Gufo builds with a runtime residual projection (`--projection-vector`) steer a
+Chat Completions request only when its body sets `"projection": true`. Set
+`PROJECTION_PORT` (for example `8082`) to open a second listener for clients that
+cannot add the field themselves:
+
+```text
+http://localhost:8082/v1    # projected
+http://localhost:8081/v1    # unchanged
+```
+
+On that port the dashboard adds `"projection": true` to `/v1/chat/completions`
+requests that leave the field out or null; an explicit `"projection": false`
+still opts out. Both ports share one Gufo server and one loaded model, and both
+are recorded. Gufo reads the field only on Chat Completions, so the projection
+port answers Responses, Messages, Completions and `/completion` requests with
+`400 projection_unsupported_endpoint` instead of running them unsteered, and
+closes WebSocket proxy connections. Other routes, such as `/v1/models`, and the
+dashboard itself pass through. Projected requests show a `PROJ` badge and have
+their own Activity filter.
+
+On the projection port `/v1/models` lists each model with a `-projection`
+suffix (for example `qwen3.8-flash-next-ud-q4_kxl-projection`), so clients show
+it as a separate model; requests naming that alias are forwarded under the
+served id and recorded under it. Set `PROJECTION_MODEL_SUFFIX` to change the
+suffix, or to an empty value to list the plain ids. Response bodies keep Gufo's
+served id.
+
+Both ports serve the same dashboard from the same database, so either page shows
+all traffic. The page served on the projection port is marked with a violet
+"Projection port" badge, and each page shows the other port's base URL. The
+**Projection** insight tab compares plain and projected requests side by side.
+
 ## Optional question-and-answer audit
 
 ![Optional content capture showing a demo question and generated answer](docs/images/content-demo.jpg)
@@ -175,6 +223,7 @@ for storage and deletion limits.
 | Reference | Contents |
 | --- | --- |
 | [Deployment and configuration](docs/deployment.md) | Docker, Python, environment variables, backups, troubleshooting |
+| [Optional context switching](docs/context-control.md) | Stock Gufo integration and controller contract |
 | [Architecture](docs/architecture.md) | Routing, forwarding, extraction, SQLite, lifecycle |
 | [Metrics and compatibility](docs/metrics.md) | Endpoint coverage, calculations, missing values, limitations |
 | [Dashboard API](docs/api.md) | Routes, parameters, pagination, response conventions |

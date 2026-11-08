@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Annotated, Any
 
+import httpx
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
@@ -47,6 +48,71 @@ def _model(model: str | None) -> str | None:
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/host-status")
+def host_status(request: Request) -> dict[str, Any]:
+    return _ctx(request).host_telemetry.snapshot()
+
+
+# Sanity bounds only. Which sizes are allowed is the controller's decision:
+# it advertises its list in /state and rejects anything else with 422.
+CONTEXT_MIN = 512
+CONTEXT_MAX = 16_777_216
+# Controller statuses that describe the request; anything else is a gateway fault.
+_CONTROLLER_PASSTHROUGH = frozenset({409, 422})
+
+
+def _controller_detail(response: httpx.Response, fallback: str) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return fallback
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return detail if isinstance(detail, str) and detail else fallback
+
+
+@router.get("/context-profile")
+async def context_profile(request: Request) -> dict[str, Any]:
+    ctx = _ctx(request)
+    if not ctx.settings.gufo_control_url:
+        return {"available": False}
+    try:
+        response = await ctx.client.get(ctx.settings.gufo_control_url + "/state", timeout=3.0)
+        response.raise_for_status()
+        state = response.json()
+    except (httpx.HTTPError, ValueError):
+        return {"available": False}
+    if not isinstance(state, dict):
+        return {"available": False}
+    return {**state, "available": True}
+
+
+@router.post("/context-profile")
+async def switch_context_profile(request: Request, payload: ClearBody) -> dict[str, Any]:
+    ctx = _ctx(request)
+    if not ctx.settings.gufo_control_url:
+        raise HTTPException(404, "context control is not configured")
+    value = payload.get("context_tokens") if isinstance(payload, dict) else None
+    if type(value) is not int or not CONTEXT_MIN <= value <= CONTEXT_MAX:
+        raise HTTPException(422, "context_tokens must be one of the controller's profiles")
+    try:
+        response = await ctx.client.post(
+            ctx.settings.gufo_control_url + "/switch",
+            json={"context_tokens": value},
+            timeout=10.0,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(503, "context controller is unavailable") from None
+    if not response.is_success:
+        detail = _controller_detail(response, "context switch failed")
+        code = response.status_code if response.status_code in _CONTROLLER_PASSTHROUGH else 502
+        raise HTTPException(code, detail)
+    try:
+        result = response.json()
+    except ValueError:
+        result = None
+    return result if isinstance(result, dict) else {"context_tokens": value}
 
 
 @router.get("/status")
@@ -116,6 +182,13 @@ def status(request: Request) -> dict[str, Any]:
             "retention_days": ctx.settings.content_retention_days,
             "max_bytes": ctx.settings.content_max_bytes,
         },
+        "listener": {
+            # Which socket served this request: the page shows it so the two
+            # ports never look alike.
+            "projection": bool(request.scope.get("state", {}).get("projection_port")),
+            "dashboard_port": ctx.settings.dashboard_port,
+            "projection_port": ctx.settings.projection_port,
+        },
         "retention_days": ctx.settings.retention_days,
         "poll_interval_seconds": ctx.settings.poll_interval_seconds,
         "now_ms": now,
@@ -158,7 +231,9 @@ def activity(
     before: str | None = Query(None, pattern=r"^\d+:(request|event):\d+$"),
     after: str | None = Query(None, pattern=r"^\d+:(request|event):\d+$"),
     model: str | None = ModelQ,
-    filter: str = Query("all", pattern="^(all|errors|vision|streaming|cancelled|content|partial)$"),
+    filter: str = Query(
+        "all", pattern="^(all|errors|vision|streaming|projection|cancelled|content|partial)$"
+    ),
 ) -> dict[str, Any]:
     if before and after:
         raise HTTPException(400, "use either before or after")
@@ -233,6 +308,12 @@ def speculative(
 def cache(request: Request, range: str = RangeQ, model: str | None = ModelQ) -> dict[str, Any]:
     with _read(request) as conn:
         return stats.cache(conn, range, _model(model), now_ms())
+
+
+@router.get("/projection")
+def projection(request: Request, range: str = RangeQ, model: str | None = ModelQ) -> dict[str, Any]:
+    with _read(request) as conn:
+        return stats.projection(conn, range, _model(model), now_ms())
 
 
 @router.get("/events")

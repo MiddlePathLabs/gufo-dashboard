@@ -214,12 +214,18 @@ class FakeGufo:
 # --------------------------------------------------------------------------- #
 
 
+def bind_local() -> socket.socket:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    return sock
+
+
 class ServerThread:
-    def __init__(self, app: Any) -> None:
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(("127.0.0.1", 0))
+    def __init__(self, app: Any, extra_sockets: tuple[socket.socket, ...] = ()) -> None:
+        self.sock = bind_local()
         self.port = self.sock.getsockname()[1]
+        self.extra_sockets = extra_sockets
         self.app = app
         config = uvicorn.Config(
             app,
@@ -231,7 +237,9 @@ class ServerThread:
             timeout_graceful_shutdown=5,
         )
         self.server = uvicorn.Server(config)
-        self.thread = threading.Thread(target=self.server.run, kwargs={"sockets": [self.sock]})
+        self.thread = threading.Thread(
+            target=self.server.run, kwargs={"sockets": [self.sock, *self.extra_sockets]}
+        )
 
     @property
     def url(self) -> str:
@@ -302,7 +310,12 @@ class Dash:
             time.sleep(0.02)
 
 
-def make_dash(tmp_path: Path, upstream: str, **overrides: Any) -> Dash:
+def make_dash(
+    tmp_path: Path,
+    upstream: str,
+    extra_sockets: tuple[socket.socket, ...] = (),
+    **overrides: Any,
+) -> Dash:
     db_path = str(tmp_path / "dash.sqlite")
     settings = Settings(
         gufo_base_url=upstream,
@@ -311,8 +324,20 @@ def make_dash(tmp_path: Path, upstream: str, **overrides: Any) -> Dash:
         poll_interval_seconds=overrides.pop("poll_interval_seconds", 0.2),
         **overrides,
     )
-    srv = ServerThread(create_app(settings)).start()
+    srv = ServerThread(create_app(settings), extra_sockets).start()
     return Dash(srv, db_path, settings)
+
+
+def make_projection_dash(tmp_path: Path, upstream: str, **overrides: Any) -> Dash:
+    """A dashboard listening on its main port and a PROJECTION_PORT listener."""
+    sock = bind_local()
+    return make_dash(
+        tmp_path,
+        upstream,
+        (sock,),
+        projection_port=sock.getsockname()[1],
+        **overrides,
+    )
 
 
 @pytest.fixture

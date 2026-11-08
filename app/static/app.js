@@ -13,6 +13,7 @@
   };
 
   const state = {
+    view: store.get("view", "live") === "history" ? "history" : "live",
     range: store.get("range", "24h"),
     model: null, // null = not chosen yet (defaults to current model)
     filter: store.get("filter", "all"),
@@ -27,6 +28,12 @@
     lastUpdated: null,
     refreshErrors: new Set(),
     dataGeneration: 0,
+    updatingSelection: false,
+    testPending: false,
+    contextInfo: null,
+    contextRequesting: false,
+    contextError: "",
+    contextChoice: null, // size picked in the dropdown; null = follow the running size
   };
 
   // ------------------------------------------------------------------ utils
@@ -101,7 +108,7 @@
   function renderFreshness() {
     const failed = state.refreshErrors.size > 0;
     const age = state.lastUpdated ? `Updated ${fDur(Date.now() - state.lastUpdated)} ago` : "Waiting for data";
-    $("refresh-text").textContent = state.paused ? `Paused · ${age}` : failed ? `Refresh failed · ${age}` : age;
+    $("refresh-text").textContent = state.updatingSelection ? `Updating selection · ${age}` : state.paused ? `Paused · ${age}` : failed ? `Refresh failed · ${age}` : age;
     $("refresh-text").classList.toggle("warn", failed || state.paused);
     $("retry-refresh").hidden = !failed;
     refreshInd.classList.toggle("err", failed);
@@ -138,32 +145,82 @@
   // ------------------------------------------------------------------ header
   const proxyUrl = `${location.protocol}//${location.host}/v1`;
   $("proxy-url").textContent = proxyUrl;
-  $("copy-url").addEventListener("click", async () => {
-    const btn = $("copy-url");
+  document.querySelectorAll("[data-copy]").forEach((btn) => btn.addEventListener("click", async () => {
+    const text = $(btn.dataset.copy).textContent;
     try {
-      await navigator.clipboard.writeText(proxyUrl);
+      await navigator.clipboard.writeText(text);
     } catch {
       const ta = document.createElement("textarea");
-      ta.value = proxyUrl; document.body.appendChild(ta); ta.select();
+      ta.value = text; document.body.appendChild(ta); ta.select();
       try { document.execCommand("copy"); } catch { /* ignore */ }
       ta.remove();
     }
     btn.classList.add("copied");
     setTimeout(() => btn.classList.remove("copied"), 1200);
-  });
+  }));
+
+  // Both listeners serve this page from one database: label which one this
+  // is, and offer the other's URL, so :8081 and :8082 never look alike.
+  let listenerKey = "";
+  function renderListener(l) {
+    const key = JSON.stringify(l || {});
+    if (key === listenerKey) return;
+    listenerKey = key;
+    const projected = !!l?.projection;
+    const other = projected ? l.dashboard_port : l?.projection_port;
+    document.body.classList.toggle("on-projection", projected);
+    $("port-badge").hidden = !projected;
+    $("proxy-kind").hidden = !l?.projection_port;
+    $("proxy-kind").textContent = projected ? "projection" : "plain";
+    $("proxy-url-wrap").title = projected
+      ? "Chat completions sent here get \"projection\": true unless they set the field. Other generation endpoints are refused on this port."
+      : "Point clients here instead of :8080. Requests are forwarded unchanged.";
+    $("alt-url-wrap").hidden = !other;
+    if (other) {
+      $("alt-kind").textContent = projected ? "plain" : "projection";
+      $("alt-url").textContent = `${location.protocol}//${location.hostname}:${other}/v1`;
+      $("alt-url-wrap").classList.toggle("proj", !projected);
+      $("alt-url-wrap").title = projected
+        ? "The main port: requests are forwarded unchanged."
+        : "The projection port: chat completions sent there get \"projection\": true. Its stats appear here too.";
+    }
+    // Projection controls only exist for operators who opened the port;
+    // without it they would be empty for anyone who never uses projection.
+    const enabled = !!l?.projection_port;
+    $("test-mode-wrap").hidden = !enabled;
+    $("test-mode").value = enabled && projected ? "projected" : "plain";
+    for (const [box, attr, fallback] of [["insight-tabs", "tab", "spec"], ["feed-filter", "filter", "all"]]) {
+      const btn = $(box).querySelector(`[data-${attr}="projection"]`);
+      btn.hidden = !enabled;
+      if (!enabled && btn.classList.contains("on")) $(box).querySelector(`[data-${attr}="${fallback}"]`).click();
+    }
+    document.title = projected ? `Gufo Dashboard · Projection :${location.port}` : "Gufo Dashboard";
+    const fill = projected ? "%23c08cff" : "%236aa9ff";
+    $("favicon").href = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='9' width='3' height='6' fill='${fill}'/%3E%3Crect x='6.5' y='5' width='3' height='10' fill='${fill}'/%3E%3Crect x='12' y='1' width='3' height='14' fill='${fill}'/%3E%3C/svg%3E`;
+  }
 
   function renderStatus(s) {
     const dot = $("status-dot");
     dot.className = "dot " + (s.online ? "dot-ok" : "dot-bad");
     $("status-text").textContent = s.online ? "online" : "offline";
-    $("status-text").className = s.online ? "" : "muted";
+    $("status-text").className = s.online ? "" : "status-down";
     $("cur-model").textContent = s.model || DASH;
     $("cur-model").title = s.model || "";
     $("gufo-version").textContent = s.gufo_version || DASH;
     $("cur-ctx").textContent = isNum(s.context_length) ? fInt(s.context_length) : DASH;
     $("ready-for").textContent = isNum(s.observed_ready_ms) ? fDur(s.observed_ready_ms) : DASH;
+    renderListener(s.listener);
+    $("live-processing").textContent = fInt(s.upstream_requests?.processing);
+    $("live-queued").textContent = fInt(s.upstream_requests?.deferred);
+    $("live-prompt-rate").textContent = isNum(s.gauges?.last_request_prefill_tps) ? `${fTps(s.gauges.last_request_prefill_tps)} tok/s` : DASH;
+    $("live-decode-rate").textContent = isNum(s.gauges?.last_request_decode_tps) ? `${fTps(s.gauges.last_request_decode_tps)} tok/s` : DASH;
+    $("test-model").textContent = s.model || "No model loaded";
+    $("test-send").disabled = state.testPending || !s.online || !s.model;
+    renderContextControls();
 
     const inf = s.in_flight || { count: 0, items: [] };
+    const active = inf.items;
+    $("live-active").innerHTML = active.length ? active.map((i) => `<div class="active-row"><span>${esc(i.model || "unknown model")} · ${esc(ENDPOINT_SHORT[i.endpoint] || i.endpoint)}${i.is_streaming ? " · stream" : ""}</span><span>${esc(i.phase || "running")} · ${fDur(i.elapsed_ms)}</span></div>`).join("") : `<p class="empty">No active proxy requests.</p>`;
     const scoped = state.model ? (inf.per_model?.[state.model] || 0) : inf.count;
     setCard("inflight", fInt(scoped), inf.items.length ? `oldest ${fDur(Math.max(...inf.items.map((i) => i.elapsed_ms)))}` : state.model && inf.count !== scoped ? `${inf.count} total` : "idle");
     const progress = inf.items.filter((i) => (!state.model || i.model === state.model) && i.phase === "prefill" && i.prompt_progress);
@@ -226,6 +283,7 @@
     "Error code": "Validated upstream or proxy error identifier. Raw upstream error messages are not stored.",
     "Finish reason": "Why generation ended, such as stop, length, or client_cancelled. Responses API entries can include terminal status and incomplete reason.",
     "Streaming": "Whether this request requested a streamed response rather than one buffered response.",
+    "Projection": "Whether the forwarded request set Gufo's runtime residual projection (\"projection\": true). Requests on the dashboard's projection port get it added unless they set the field themselves. Unset means the server default applied.",
     "Vision / images": "Whether image inputs were detected in the request and how many image references were counted. This does not measure image tokens or prove the model accepted the images.",
     "TTFT source": "gufo means server-reported time to first token; proxy_stream means proxy-measured first non-empty streamed text or reasoning delta. Missing means no TTFT measurement was available.",
     "Prompt": "Reported total input tokens for this request, including cached tokens.",
@@ -259,6 +317,162 @@
     "Context": "Configured maximum context tokens reported for the loaded model. This is a limit, not current memory usage.",
     "Context used": "Reported prompt plus generated tokens divided by the model's configured context length. This is a token estimate, not KV memory utilization.",
   };
+  const LIVE_HELP = {
+    engine: "Processing and queued are Gufo-wide values from /metrics. The prefill and decode gauges report the engine's latest rate and may read zero while idle. They are not selected-range averages. A dash means the engine did not provide the reading.",
+    host: "CPU and RAM come from Linux /proc. AMD GPU busy, VRAM, and GTT come from /sys/class/drm when accessible to the dashboard process. Values are current snapshots and are not stored. A dash means unavailable.",
+    active: "Requests currently open through this dashboard proxy. Traffic sent directly to Gufo is not listed here.",
+    test: "Sends one non-streaming Chat Completions request through this dashboard proxy using the current model. Projection Off sends an explicit projection:false; On sends projection:true. Either works on this page's port. The request appears in Activity. If Gufo requires a client API key, use your normal client instead.",
+  };
+  document.querySelectorAll("[data-help]").forEach((button) => button.addEventListener("click", () => {
+    $("help-heading").textContent = button.closest(".panel")?.querySelector("h2")?.textContent || "Metric help";
+    $("help-body").textContent = LIVE_HELP[button.dataset.help];
+    $("help-dialog").showModal();
+  }));
+
+  function showView(view, { refresh = true } = {}) {
+    const changed = state.view !== view;
+    state.view = view;
+    store.set("view", view);
+    $("live-view").hidden = view !== "live";
+    $("history-view").hidden = view !== "history";
+    document.querySelector(".toolbar").hidden = view !== "history";
+    document.querySelectorAll(".view-nav button").forEach((button) => {
+      const selected = button.dataset.view === view;
+      button.classList.toggle("on", selected);
+      if (selected) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    if (refresh && changed && view === "history") refreshData();
+  }
+  document.querySelectorAll(".view-nav button").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
+  showView(state.view, { refresh: false });
+
+  // 131072 -> "128K", 1048576 -> "1M"; sizes that are not whole K stay exact.
+  function contextLabel(tokens) {
+    if (!isNum(tokens) || tokens <= 0) return "Unknown";
+    if (tokens % 1048576 === 0) return `${tokens / 1048576}M`;
+    if (tokens % 1024 === 0) return `${tokens / 1024}K`;
+    return fInt(tokens);
+  }
+  const contextOption = (tokens) => {
+    const label = contextLabel(tokens);
+    return label === fInt(tokens) ? `${label} tokens` : `${label} · ${fInt(tokens)} tokens`;
+  };
+  function renderContextControls() {
+    const info = state.contextInfo;
+    $("context-controls").hidden = !info?.available;
+    if (!info?.available) return;
+    const current = info.context_tokens;
+    const label = contextLabel(current);
+    const ready = state.status?.online && state.status?.context_length === current;
+    $("context-current").textContent = info.switching || state.contextRequesting ? "Restarting…" : ready ? `${label} active` : current ? `${label} loading…` : "Gufo unavailable";
+    $("context-feedback").textContent = state.contextError || info.last_error || (current && !ready ? "Gufo is loading the model. Dashboard proxying will resume when ready." : "Switching reloads Gufo; dashboard history remains.");
+    const profiles = (Array.isArray(info.profiles) ? info.profiles : []).filter((p) => isNum(p) && p > 0);
+    const select = $("context-select");
+    // Rebuild only when the advertised list changes, so polling never resets
+    // an open dropdown.
+    const key = profiles.join(",");
+    if (select.dataset.profiles !== key) {
+      select.dataset.profiles = key;
+      select.replaceChildren(...profiles.map((p) => new Option(contextOption(p), String(p))));
+    }
+    if (!profiles.includes(state.contextChoice)) state.contextChoice = null;
+    const choice = state.contextChoice ?? (profiles.includes(current) ? current : profiles[0]);
+    if (choice !== undefined) select.value = String(choice);
+    const busy = !!info.switching || state.contextRequesting;
+    select.disabled = busy || !profiles.length;
+    $("context-apply").disabled = busy || choice === undefined || choice === current;
+  }
+
+  async function refreshContext() {
+    try {
+      state.contextInfo = await api("/api/context-profile");
+      if (state.contextError === "Context control is unavailable.") state.contextError = "";
+    } catch {
+      state.contextError = "Context control is unavailable.";
+    }
+    renderContextControls();
+  }
+
+  let requestedContext = null;
+  $("context-select").addEventListener("change", () => {
+    state.contextChoice = Number($("context-select").value);
+    renderContextControls();
+  });
+  $("context-apply").addEventListener("click", () => {
+    const value = Number($("context-select").value);
+    if (!value || state.contextRequesting || state.contextInfo?.switching || value === state.contextInfo?.context_tokens) return;
+    requestedContext = value;
+    $("context-dialog-title").textContent = `Switch Gufo to ${contextLabel(value)}?`;
+    $("context-dialog").returnValue = "";
+    $("context-dialog").showModal();
+  });
+  $("context-dialog").addEventListener("close", async () => {
+    if ($("context-dialog").returnValue !== "switch" || !requestedContext) return;
+    const value = requestedContext;
+    requestedContext = null;
+    state.contextRequesting = true;
+    state.contextError = "";
+    renderContextControls();
+    try {
+      const response = await fetch("/api/context-profile", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context_tokens: value }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+      state.contextChoice = null;
+      await refreshStatus();
+    } catch (error) {
+      state.contextError = `Switch failed: ${error.message}`;
+    } finally {
+      state.contextRequesting = false;
+      await refreshContext();
+    }
+  });
+
+  async function refreshHost() {
+    try {
+      const host = await api("/api/host-status");
+      $("live-cpu").textContent = isNum(host.cpu_pct) ? `${fTps(host.cpu_pct)}%` : DASH;
+      $("live-ram").textContent = isNum(host.memory?.used_bytes) && isNum(host.memory?.total_bytes) ? `${fBytes(host.memory.used_bytes)} / ${fBytes(host.memory.total_bytes)}` : DASH;
+      $("live-gpu").textContent = isNum(host.gpu?.busy_pct) ? `${fInt(host.gpu.busy_pct)}%` : DASH;
+      $("live-vram").textContent = isNum(host.gpu?.vram_used_bytes) && isNum(host.gpu?.vram_total_bytes) ? `${fBytes(host.gpu.vram_used_bytes)} / ${fBytes(host.gpu.vram_total_bytes)}` : DASH;
+      $("live-gtt").textContent = isNum(host.gpu?.gtt_used_bytes) && isNum(host.gpu?.gtt_total_bytes) ? `${fBytes(host.gpu.gtt_used_bytes)} / ${fBytes(host.gpu.gtt_total_bytes)}` : DASH;
+      $("host-note").textContent = host.gpu ? `AMD ${host.gpu.card} · Linux counters` : "GPU counters unavailable to this process.";
+    } catch {
+      $("host-note").textContent = "Host telemetry unavailable.";
+    }
+  }
+  $("test-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const model = state.status?.model;
+    if (!model) return;
+    const prompt = $("test-prompt").value.trim();
+    if (!prompt) return;
+    if (state.testPending) return;
+    const projected = !$("test-mode-wrap").hidden && $("test-mode").value === "projected";
+    const send = $("test-send");
+    state.testPending = true;
+    send.disabled = true;
+    $("test-result").textContent = `Waiting for Gufo · projection ${projected ? "on" : "off"}…`;
+    try {
+      const response = await fetch("/v1/chat/completions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], stream: false, max_tokens: 256, projection: projected }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error?.message || body.detail || `HTTP ${response.status}`);
+      const content = body.choices?.[0]?.message?.content;
+      $("test-result").textContent = `${projected ? "Projected" : "Plain"} response\n\n${typeof content === "string" ? content : "Gufo returned no text response."}`;
+    } catch (error) {
+      $("test-result").textContent = `${projected ? "Projected" : "Plain"} test failed: ${error.message}`;
+    } finally {
+      state.testPending = false;
+      send.disabled = !state.status?.online || !state.status?.model;
+      loadNewer().catch(() => {});
+    }
+  });
   const HELP_ALIASES = {
     "Weighted decode tok/s": "Weighted decode", "Hit rate": "Cache hit",
     "decode_tps": "Weighted decode", "prefill_tps": "Weighted prefill",
@@ -301,6 +515,37 @@
   }
   const CARD_HELP = { inflight: "In flight", decode: "Weighted decode", prefill: "Weighted prefill", ttft: "TTFT p50", errors: "Error rate", requests: "Requests", gen: "Generated tokens", prompt: "Prompt tokens", cache: "Cache hit", draft: "Draft acceptance" };
   document.querySelectorAll("[data-card]").forEach((el) => { el.title = statHelp(CARD_HELP[el.dataset.card]) + " A dash means unavailable, not zero. Performance and efficiency rates require a selected model."; });
+  for (const card of document.querySelectorAll(".card:not(button)[data-card]")) {
+    const label = CARD_HELP[card.dataset.card];
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "help-btn card-help";
+    button.textContent = "?";
+    button.setAttribute("aria-label", `About ${label}`);
+    button.addEventListener("click", () => {
+      $("help-heading").textContent = label;
+      $("help-body").textContent = statHelp(label);
+      $("help-dialog").showModal();
+    });
+    card.append(button);
+  }
+  for (const [id, title, help] of [
+    ["chart-primary", "Requests & generated tokens", "Recorded requests and generated tokens over the selected range. Hover over points for values. Requests sent directly to Gufo are excluded."],
+    ["chart-secondary", "Performance over time", "The selected metric is calculated per model and time bucket. Gaps mean no usable measurements, not zero."],
+  ]) {
+    const panel = $(id).closest(".panel");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "help-btn";
+    button.textContent = "?";
+    button.setAttribute("aria-label", `About ${title}`);
+    button.addEventListener("click", () => {
+      $("help-heading").textContent = title;
+      $("help-body").textContent = help;
+      $("help-dialog").showModal();
+    });
+    panel.querySelector(".panel-head").append(button);
+  }
   document.querySelectorAll("[data-metric]").forEach((el) => { el.title = statHelp(el.dataset.metric); });
   $("cur-ctx").parentElement.title = statHelp("Context");
   $("cur-model").parentElement.title = "Model currently loaded in Gufo. Selected-range statistics can also include previously loaded models.";
@@ -322,8 +567,7 @@
 
   function renderCards(s) {
     setCard("requests", fInt(s.requests), `${fInt(s.streaming)} stream · ${fInt(s.vision)} vision`);
-    const errCls = s.errors > 0 ? "bad" : "";
-    setCard("errors", s.requests ? fPct(s.error_rate) : DASH, `${fInt(s.errors)} errors · ${fInt(s.cancelled)} cancelled`, errCls);
+    setCard("errors", s.requests ? fPct(s.error_rate) : DASH, `${fInt(s.errors)} errors · ${fInt(s.cancelled)} cancelled`);
     setCard("gen", fCompact(s.generated_tokens), `reasoning ${fCompact(s.reasoning_tokens)}`);
     setCard("prompt", fCompact(s.prompt_tokens), `cached ${fCompact(s.cached_tokens)}`);
 
@@ -362,7 +606,7 @@
   Chart.defaults.color = cv("--muted");
   Chart.defaults.font.family = cv("--sans");
   Chart.defaults.font.size = 11;
-  Chart.defaults.borderColor = "rgba(152,163,179,.10)";
+  Chart.defaults.borderColor = cv("--chart-grid");
   Chart.defaults.animation = false;
 
   let lastSpan = 3600000;
@@ -375,8 +619,8 @@
 
   const primary = new Chart($("chart-primary"), {
     data: { datasets: [
-      { type: "bar", label: "requests", data: [], yAxisID: "y", backgroundColor: "rgba(106,169,255,0.45)", borderWidth: 0, barPercentage: 1, categoryPercentage: 0.9 },
-      { type: "line", label: "generated tokens", data: [], yAxisID: "y1", borderColor: cv("--series-2"), backgroundColor: cv("--series-2"), borderWidth: 2, pointRadius: 1.5, tension: 0.2, spanGaps: true },
+      { type: "bar", label: "requests", data: [], yAxisID: "y", backgroundColor: cv("--chart-bar"), borderWidth: 0, barPercentage: 1, categoryPercentage: 0.9 },
+      { type: "line", label: "generated tokens", data: [], yAxisID: "y1", borderColor: cv("--series-2"), backgroundColor: cv("--series-2"), borderWidth: 2, pointRadius: 1.5, tension: 0.2, spanGaps: false },
     ] },
     options: {
       maintainAspectRatio: false,
@@ -386,8 +630,8 @@
       } } },
       scales: {
         x: timeAxis(),
-        y: { beginAtZero: true, ticks: { precision: 0, maxTicksLimit: 5 }, title: { display: false } },
-        y1: { beginAtZero: true, position: "right", grid: { display: false }, ticks: { maxTicksLimit: 5, callback: (v) => fCompact(v) } },
+        y: { beginAtZero: true, ticks: { precision: 0, maxTicksLimit: 5 }, title: { display: true, text: "Requests" } },
+        y1: { beginAtZero: true, position: "right", grid: { display: false }, ticks: { maxTicksLimit: 5, callback: (v) => fCompact(v) }, title: { display: true, text: "Tokens" } },
       },
     },
   });
@@ -413,6 +657,39 @@
       scales: { x: timeAxis(), y: { beginAtZero: true, ticks: { maxTicksLimit: 5 } } },
     },
   });
+
+  const themeToggle = $("theme-toggle");
+  function renderThemeToggle() {
+    const light = document.documentElement.dataset.theme === "light";
+    themeToggle.textContent = light ? "Dark mode" : "Light mode";
+    themeToggle.setAttribute("aria-label", `Switch to ${light ? "dark" : "light"} mode`);
+  }
+  function refreshChartTheme() {
+    Chart.defaults.color = cv("--muted");
+    Chart.defaults.borderColor = cv("--chart-grid");
+    ["--accent", "--series-2", "--series-3", "--warn", "--ok"].forEach((token, i) => { SERIES[i] = cv(token); });
+    primary.data.datasets[0].backgroundColor = cv("--chart-bar");
+    primary.data.datasets[1].borderColor = SERIES[1];
+    primary.data.datasets[1].backgroundColor = SERIES[1];
+    for (const chart of [primary, secondary]) {
+      for (const axis of Object.values(chart.options.scales)) {
+        axis.ticks.color = cv("--muted");
+        axis.grid ||= {};
+        if (axis.grid.display !== false) axis.grid.color = cv("--chart-grid");
+        if (axis.title) axis.title.color = cv("--muted");
+      }
+      chart.update();
+    }
+    renderSecondary();
+  }
+  themeToggle.addEventListener("click", () => {
+    const theme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    store.set("theme", theme);
+    renderThemeToggle();
+    refreshChartTheme();
+  });
+  renderThemeToggle();
 
   let lastTs = null;
   function renderCharts(ts) {
@@ -475,7 +752,7 @@
     });
     if (isTablist) box.addEventListener("keydown", (e) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-      const buttons = [...box.querySelectorAll("button")];
+      const buttons = [...box.querySelectorAll("button")].filter((b) => !b.hidden);
       const index = buttons.indexOf(document.activeElement);
       if (index < 0) return;
       e.preventDefault();
@@ -495,7 +772,7 @@
   setupTabs("chart-tabs", "metric", "metric", renderSecondary);
 
   // ---------------------------------------------------------------- insights
-  let spec = null, cache = null;
+  let spec = null, cache = null, projection = null;
   function kvRows(rows) {
     return `<table class="kvt">${rows.map(([k, v, title]) => {
       const help = title || statHelp(k);
@@ -552,6 +829,31 @@
       + (events.length ? '<h3 class="insight-subhead">RECENT CACHE PRESSURE EVENTS</h3>' + kvRows(events) : '');
   }
 
+  function projectionView() {
+    if (!projection) return "";
+    const port = state.status?.listener?.projection_port;
+    const list = projection.per_model.filter((m) => m.projected);
+    if (!list.length) {
+      return `<p class="note">No projected requests in this range.${port ? ` Send chat completions to <code>${esc(`${location.protocol}//${location.hostname}:${port}/v1`)}</code> to compare.` : " Set PROJECTION_PORT to open a projection port."}</p>`;
+    }
+    const rows = [
+      ["Requests", (b) => fInt(b.requests), "Recorded requests in the selected range."],
+      ["Error rate", (b) => fPct(b.error_rate), "Share of requests with an HTTP error or error code."],
+      ["Weighted decode tok/s", (b) => fTps(b.decode_tps_weighted), statHelp("Weighted decode tok/s")],
+      ["Decode tok/s p50", (b) => fTps(b.decode_tps_p50), "Median of per-request decode rates."],
+      ["Weighted prefill tok/s", (b) => fTps(b.prefill_tps_weighted), "1000 × summed prefilled tokens / summed prefill milliseconds."],
+      ["TTFT p50", (b) => fMs(b.ttft_p50_ms), statHelp("TTFT")],
+      ["Draft acceptance", (b) => fPct(b.draft_acceptance), "Σ accepted / Σ drafted tokens."],
+      ["Cache hit rate", (b) => fPct(b.cache_hit_rate), "Hits / requests with cache data. Gufo keeps projected and plain prompt caches apart, so a prompt cached in one state misses in the other."],
+      ["Avg generated tokens", (b) => fTps(b.generated_avg), "Generated tokens per request, including reasoning."],
+    ];
+    const cell = (b, f) => (b ? f(b) : DASH);
+    return list.map((m) => modelHead(m.model, list.length > 1)
+      + `<table class="bands compare"><thead><tr><th scope="col"></th><th scope="col">plain</th><th scope="col" class="proj">projected</th></tr></thead><tbody>`
+      + rows.map(([k, f, help]) => `<tr title="${esc(help + " A dash means unavailable, not zero.")}"><td>${esc(k)}</td><td>${cell(m.plain, f)}</td><td class="proj">${cell(m.projected, f)}</td></tr>`).join("")
+      + `</tbody></table>`).join("")
+      + `<p class="note">Projected = the forwarded body set "projection": true (the projection port adds it); plain = unset or false. Both ports record into these stats; the cards and charts above combine them.${state.range === "all" ? " All time covers retained rows only." : ""}</p>`;
+  }
   function renderInsights() {
     const body = $("insight-body");
     if (state.insight === "spec") {
@@ -565,6 +867,8 @@
         ["Requests with draft stats", `n=${fInt(m.draft_requests)}/${fInt(m.requests)}`],
         ["Weighted decode tok/s", fTps(m.decode_tps_weighted)],
       ])).join("") + `<p class="note">Acceptance = Σ accepted / Σ drafted, per model.</p>`;
+    } else if (state.insight === "projection") {
+      body.innerHTML = projectionView();
     } else if (state.insight === "cache") {
       if (!cache) { body.innerHTML = ""; return; }
       const list = cache.per_model;
@@ -650,6 +954,7 @@
     const badges = [];
     if (it.is_streaming) badges.push(`<span class="badge" ${helpTitle("Streaming")}>STREAM</span>`);
     if (it.is_vision) badges.push(`<span class="badge" title="${esc(statHelp("Vision / images"))} ${esc(it.image_count)} image(s).">VISION</span>`);
+    if (it.projection === 1) badges.push(`<span class="badge proj" ${helpTitle("Projection")}>PROJ</span>`);
     // A hit can reuse only part of a prompt: show how much when both counts exist.
     const hitShare = isNum(it.cached_tokens) && isNum(it.prompt_tokens) && it.prompt_tokens > 0
       ? Math.round((100 * it.cached_tokens) / it.prompt_tokens) : null;
@@ -677,7 +982,7 @@
     if (f.error) html += `<p class="empty">Activity could not be refreshed. <button class="btn" id="retry-feed" type="button">Retry activity</button></p>`;
     else if (!f.items.length && f.done) {
       const filtered = state.filter !== "all" || !!state.model;
-      const filterLabel = { errors: "errors", vision: "vision requests", streaming: "streaming requests", all: "requests", content: "requests with content", partial: "incomplete captures" }[state.filter];
+      const filterLabel = { errors: "errors", vision: "vision requests", streaming: "streaming requests", all: "requests", content: "requests with content", partial: "incomplete captures", projection: "projected requests" }[state.filter];
       html += filtered ? `<p class="empty">No ${filterLabel} match ${state.model ? "this model and filter" : "this filter"}.<br>Try another model or activity filter.</p>` : `<p class="empty">No activity yet.<br>Send requests to <code>${esc(proxyUrl)}</code> to start recording.</p>`;
     }
     else if (f.loading) html += `<div class="feed-more">loading…</div>`;
@@ -772,11 +1077,16 @@
     feedList.querySelector(`.feed-row[data-id="${reqs[idx].id}"]`)?.scrollIntoView({ block: "nearest" });
   });
   setupTabs("feed-filter", "filter", "filter", resetFeed);
+  $("errors-card").addEventListener("click", () => {
+    $("feed-filter").querySelector('[data-filter="errors"]').click();
+    document.querySelector(".feed").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   // ------------------------------------------------------------------ detail
   const detail = $("detail");
   function closeDetail(returnFocus = true) {
     state.selectedId = null;
+    detail.hidden = true;
     $("detail-tabs").hidden = true;
     $("content-body").hidden = true;
     $("content-body").replaceChildren();
@@ -793,6 +1103,8 @@
   });
   async function select(id) {
     state.selectedId = id;
+    detail.hidden = false;
+    if (matchMedia("(max-width: 900px)").matches) detail.scrollIntoView({ behavior: "smooth", block: "start" });
     $("detail-tabs").hidden = false;
     setDetailView("metrics");
     feedList.querySelectorAll(".feed-row[data-id]").forEach((r) => {
@@ -925,7 +1237,7 @@
     const hitTxt = r.cache_hit === true ? `<span class="badge hit">HIT</span>` : r.cache_hit === false ? `<span class="badge miss">MISS</span>` : DASH;
     $("detail-body").innerHTML = `
       <div class="status-line"><span class="mono" title="API endpoint used by this request.">${esc(r.endpoint)}</span><span ${helpTitle("HTTP status")}>HTTP ${fInt(r.http_status)}</span>
-        ${r.is_streaming ? `<span class="badge" ${helpTitle("Streaming")}>STREAM</span>` : ""}${r.is_vision ? `<span class="badge" ${helpTitle("Vision / images")}>VISION ×${esc(r.image_count)}</span>` : ""}
+        ${r.is_streaming ? `<span class="badge" ${helpTitle("Streaming")}>STREAM</span>` : ""}${r.is_vision ? `<span class="badge" ${helpTitle("Vision / images")}>VISION ×${esc(r.image_count)}</span>` : ""}${r.projection === true ? `<span class="badge proj" ${helpTitle("Projection")}>PROJ</span>` : ""}
         <span class="muted" title="Time when the proxy received this request.">${fDateTime(r.started_at_ms)}</span></div>
       ${timelineHtml(r)}
       <div class="detail-grid">
@@ -934,7 +1246,8 @@
           ["Model", `<span class="mono">${esc(r.model || DASH)}</span>`],
           ["HTTP status", fInt(r.http_status)], ["Error code", esc(r.error_code || DASH)],
           ["Finish reason", esc(r.finish_reason || DASH)], ["Streaming", r.is_streaming ? "Yes" : "No"],
-          ["Vision / images", r.is_vision ? `Yes / ${fInt(r.image_count)}` : "No"], ["TTFT source", esc(r.ttft_source || DASH)]])}
+          ["Vision / images", r.is_vision ? `Yes / ${fInt(r.image_count)}` : "No"],
+          ...(typeof r.projection === "boolean" ? [["Projection", r.projection ? "On" : "Off"]] : []), ["TTFT source", esc(r.ttft_source || DASH)]])}
         ${section("Tokens", [
           ["Prompt", fInt(r.prompt_tokens)], ["Cached", fInt(r.cached_tokens)], ["Prefilled", fInt(r.prefill_tokens)],
           ["Generated", fInt(r.completion_tokens)], ["Reasoning", fInt(r.reasoning_tokens)]], promptBar(r) + ctx)}
@@ -960,10 +1273,13 @@
   // --------------------------------------------------------------- controls
   function setupRange() {
     const box = $("range");
-    const sync = () => box.querySelectorAll("button").forEach((b) => {
-      const on = b.dataset.range === state.range;
-      b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
-    });
+    const sync = () => {
+      box.querySelectorAll("button").forEach((b) => {
+        const on = b.dataset.range === state.range;
+        b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+      });
+      $("period-context").textContent = `In flight live · metrics ${state.range === "all" ? "all time" : state.range}`;
+    };
     box.addEventListener("click", (e) => {
       const b = e.target.closest("button");
       if (!b) return;
@@ -1011,16 +1327,10 @@
   // ---------------------------------------------------------------- refresh
   function resetData() {
     state.dataGeneration++;
-    state.summary = null;
-    state.lastUpdated = null;
-    spec = null; cache = null; lastTs = null;
-    for (const key of ["requests", "errors", "gen", "prompt", "decode", "prefill", "ttft", "cache", "draft"]) setCard(key, DASH, "", "na");
-    $("c-ttft").parentElement.querySelector(".label").textContent = "TTFT p50";
+    state.updatingSelection = true;
+    document.querySelector("main").classList.add("data-stale");
+    document.querySelector("main").setAttribute("aria-busy", "true");
     $("model-hint").hidden = !!state.model;
-    primary.data.datasets.forEach((d) => { d.data = []; }); primary.update();
-    secondary.data.datasets = []; secondary.update();
-    $("secondary-legend").textContent = "";
-    $("insight-body").innerHTML = `<p class="note">Loading metrics…</p>`;
     renderFreshness();
   }
   async function refreshStatus() {
@@ -1038,23 +1348,29 @@
   async function refreshData() {
     const generation = ++state.dataGeneration;
     const q = qs();
-    const [s, ts, sp, ca] = await Promise.allSettled([
+    const [s, ts, sp, ca, pr] = await Promise.allSettled([
       api("/api/summary?" + q),
       api("/api/timeseries?" + qs({ bucket: "auto" })),
       api("/api/speculative?" + q),
       api("/api/cache?" + q),
+      api("/api/projection?" + q),
     ]);
     if (generation !== state.dataGeneration || q !== qs()) return;
     if (s.status === "fulfilled") { state.summary = s.value; renderCards(s.value); }
     if (ts.status === "fulfilled") renderCharts(ts.value);
     if (sp.status === "fulfilled") spec = sp.value;
     if (ca.status === "fulfilled") cache = ca.value;
-    if ([s, ts, sp, ca].every((result) => result.status === "fulfilled")) state.lastUpdated = Date.now();
+    if (pr.status === "fulfilled") projection = pr.value;
+    const complete = [s, ts, sp, ca, pr].every((result) => result.status === "fulfilled");
+    if (complete) state.lastUpdated = Date.now();
+    state.updatingSelection = false;
+    document.querySelector("main").classList.toggle("data-stale", !complete);
+    document.querySelector("main").setAttribute("aria-busy", String(!complete));
     renderInsights();
     renderFreshness();
   }
   async function refreshAll() {
-    await Promise.allSettled([refreshStatus(), refreshModels()]);
+    await Promise.allSettled([refreshStatus(), refreshModels(), refreshHost(), refreshContext()]);
     await refreshData();
   }
 
@@ -1069,10 +1385,18 @@
   (async () => {
     try { await refreshModels(); } catch { state.model = ""; }
     await refreshStatus();
+    await refreshHost();
+    await refreshContext();
     await refreshData();
     resetFeed();
     every(STATUS_MS, refreshStatus);
-    every(DATA_MS, async () => { await refreshModels().catch(() => {}); await refreshData(); });
+    every(STATUS_MS, refreshHost);
+    every(STATUS_MS, refreshContext);
+    every(DATA_MS, async () => {
+      await refreshModels().catch(() => {});
+      // Charts and cards live in the history view; it refreshes when shown.
+      if (state.view === "history") await refreshData();
+    });
     every(FEED_MS, loadNewer);
   })();
   setInterval(renderFreshness, 1000);

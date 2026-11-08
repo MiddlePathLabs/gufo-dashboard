@@ -19,7 +19,9 @@ from .extract import RECORD_COLUMNS
 
 log = logging.getLogger("gufo_dashboard.db")
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+# Columns added after version 1 or 2, migrated in place by init_db.
+_ADDED_IN_V3 = {"request_stats": ("projection",)}
 
 _INT_COLS = {
     "started_at_ms",
@@ -27,6 +29,7 @@ _INT_COLS = {
     "is_streaming",
     "is_vision",
     "image_count",
+    "projection",
     "http_status",
     "prompt_tokens",
     "cached_tokens",
@@ -180,11 +183,11 @@ def init_db(path: str) -> None:
                     "dashboard release or a new DATABASE_PATH."
                 )
             versions = conn.execute("SELECT version FROM schema_version").fetchall()
-            if len(versions) != 1 or versions[0][0] not in (1, SCHEMA_VERSION):
+            if len(versions) != 1 or versions[0][0] not in (1, 2, SCHEMA_VERSION):
                 found = [row[0] for row in versions]
                 raise RuntimeError(
                     f"Unsupported database schema version {found}; this release supports "
-                    f"1 and {SCHEMA_VERSION}. Back up the database and use a compatible "
+                    f"1 to {SCHEMA_VERSION}. Back up the database and use a compatible "
                     "dashboard release or a new DATABASE_PATH."
                 )
             version = versions[0][0]
@@ -203,6 +206,8 @@ def init_db(path: str) -> None:
                     ),
                 ):
                     required = {row[1] for row in expected.execute(f"PRAGMA table_info({table})")}
+                    if version < 3:
+                        required -= set(_ADDED_IN_V3.get(table, ()))
                     actual = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
                     if missing := required - actual:
                         raise RuntimeError(
@@ -211,9 +216,15 @@ def init_db(path: str) -> None:
                             "compatible dashboard release or a new DATABASE_PATH."
                         )
         conn.executescript(_schema())
+        if version is not None and version < 3:
+            for table, columns in _ADDED_IN_V3.items():
+                actual = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                for column in columns:
+                    if column not in actual:
+                        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {_col_type(column)}")
         if version is None:
             conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
-        elif version == 1:
+        elif version < SCHEMA_VERSION:
             conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
         conn.commit()
     finally:

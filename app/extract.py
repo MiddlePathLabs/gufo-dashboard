@@ -27,6 +27,8 @@ RECORDED_ENDPOINTS: dict[str, str] = {
     "/completion": "native",
 }
 INJECTABLE = {"chat", "completions"}
+# Endpoints whose Gufo parser reads the per-request "projection" field.
+PROJECTABLE = {"chat"}
 IMAGE_PART_TYPES = {"image_url", "input_image", "image"}
 
 
@@ -115,6 +117,7 @@ class RequestInfo:
     image_count: int = 0
     usage_requested: bool = False  # caller asked for include_usage itself
     injected: bool = False  # we added include_usage and must strip the event
+    projection: bool | None = None  # the forwarded body's "projection" value
     body: bytes = b""
 
 
@@ -132,11 +135,23 @@ def _count_images(node: Any, depth: int = 0) -> int:
     return 0
 
 
-def analyze_request(kind: str, body: bytes) -> RequestInfo:
-    """Parse the request JSON once; decide on usage injection.
+def strip_model_suffix(model: str, suffix: str) -> str:
+    """The served model id behind a projection-port alias, if it is one."""
+    if suffix and model.endswith(suffix) and len(model) > len(suffix):
+        return model[: -len(suffix)]
+    return model
 
-    Only `stream`, `stream_options`, `model` and image parts are looked at.
-    The parsed object is dropped before returning.
+
+def analyze_request(
+    kind: str, body: bytes, *, default_projection: bool = False, model_suffix: str = ""
+) -> RequestInfo:
+    """Parse the request JSON once; decide on usage and projection injection.
+
+    Only `stream`, `stream_options`, `projection`, `model` and image parts are
+    looked at. With `default_projection`, a chat request without a
+    `projection` field gets `"projection": true`, and a `model` ending in
+    `model_suffix` (the projection port's alias) is forwarded without it. The
+    parsed object is dropped before returning.
     """
     info = RequestInfo(kind=kind, body=body)
     try:
@@ -148,7 +163,10 @@ def analyze_request(kind: str, body: bytes) -> RequestInfo:
     info.is_streaming = obj.get("stream") is True
     info.model = as_str(obj.get("model"), 128)
     info.image_count = _count_images(obj.get("messages")) + _count_images(obj.get("input"))
+    projection = obj.get("projection")
+    info.projection = projection if isinstance(projection, bool) else None
 
+    inject_usage = False
     if kind in INJECTABLE and info.is_streaming:
         missing = object()
         so = obj.get("stream_options", missing)
@@ -159,14 +177,27 @@ def analyze_request(kind: str, body: bytes) -> RequestInfo:
                 new_so = dict(so) if isinstance(so, dict) else {}
                 new_so["include_usage"] = True
                 obj["stream_options"] = new_so
-                try:
-                    info.body = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode(
-                        "utf-8"
-                    )
-                    info.injected = True
-                except (TypeError, ValueError):
-                    # e.g. NaN/Infinity in the caller's body: never "repair" it.
-                    info.body = body
+                inject_usage = True
+    inject_projection = default_projection and kind in PROJECTABLE and projection is None
+    if inject_projection:
+        obj["projection"] = True
+    alias = obj.get("model")
+    served = strip_model_suffix(alias, model_suffix) if isinstance(alias, str) else alias
+    unalias = served != alias
+    if unalias:
+        obj["model"] = served
+    if inject_usage or inject_projection or unalias:
+        try:
+            info.body = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        except (TypeError, ValueError):
+            # e.g. NaN/Infinity in the caller's body: never "repair" it.
+            info.body = body
+        else:
+            info.injected = inject_usage
+            if inject_projection:
+                info.projection = True
+            if unalias:
+                info.model = as_str(obj["model"], 128)
     return info
 
 
@@ -517,6 +548,7 @@ RECORD_COLUMNS = (
     "is_streaming",
     "is_vision",
     "image_count",
+    "projection",
     "http_status",
     "error_code",
     "finish_reason",
@@ -575,6 +607,7 @@ def finalize_record(
     request_model: str | None,
     is_streaming: bool,
     image_count: int,
+    projection: bool | None = None,
     http_status: int,
     gufo_request_id: str | None,
     started_at_ms: int,
@@ -604,6 +637,7 @@ def finalize_record(
         is_streaming=is_streaming,
         is_vision=image_count > 0,
         image_count=image_count,
+        projection=projection,
         http_status=http_status,
         proxy_ttfb_ms=proxy_ttfb_ms,
         proxy_first_token_ms=proxy_first_token_ms if is_streaming else None,

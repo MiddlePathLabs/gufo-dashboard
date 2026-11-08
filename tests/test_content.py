@@ -224,7 +224,7 @@ def test_retention_migration_clear_and_queue_budget(tmp_path: Path) -> None:
     conn.execute("DROP TABLE request_content")
     conn.commit()
     init_db(path)
-    assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 2
+    assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 3
 
     async def run() -> None:
         w = StatsWriter(path, 10, 90, 7)

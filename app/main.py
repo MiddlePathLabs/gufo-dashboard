@@ -26,6 +26,7 @@ from starlette.websockets import WebSocket
 from .api import router
 from .config import Settings
 from .db import StatsWriter, connect, init_db
+from .host_telemetry import HostTelemetry
 from .poller import Poller
 from .proxy import KNOWN_ROUTES, InFlightTracker, Proxy
 from .websocket_proxy import WebSocketProxy
@@ -57,6 +58,7 @@ class AppContext:
     poller: Poller
     proxy: Proxy
     websocket_proxy: WebSocketProxy
+    host_telemetry: HostTelemetry
 
 
 def _is_dashboard_path(path: str) -> bool:
@@ -75,9 +77,20 @@ class Dispatcher:
     duration and Gufo request ID. Never bodies, headers, query strings or IPs.
     """
 
-    def __init__(self, dashboard: FastAPI, allowed_hosts: tuple[str, ...] = ("localhost",)) -> None:
+    def __init__(
+        self,
+        dashboard: FastAPI,
+        allowed_hosts: tuple[str, ...] = ("localhost",),
+        projection_port: int | None = None,
+    ) -> None:
         self.dashboard = dashboard
         self.allowed_hosts = {host.lower().rstrip(".") for host in allowed_hosts}
+        self.projection_port = projection_port
+
+    def on_projection_port(self, scope: Scope) -> bool:
+        """True for connections accepted on the PROJECTION_PORT listener."""
+        server = scope.get("server")
+        return server is not None and server[1] == self.projection_port
 
     def valid_host(self, scope: Scope) -> bool:
         hosts = [value.decode("latin-1") for key, value in scope["headers"] if key == b"host"]
@@ -101,6 +114,9 @@ class Dispatcher:
                 await WebSocket(scope, receive, send).close(code=1008)
             elif _is_dashboard_path(scope["path"]):
                 await self.dashboard(scope, receive, send)
+            elif self.on_projection_port(scope):
+                # WebSocket APIs carry no per-request projection field.
+                await WebSocket(scope, receive, send).close(code=1008)
             else:
                 websocket_proxy: WebSocketProxy = self.dashboard.state.ctx.websocket_proxy
                 await websocket_proxy(scope, receive, send)
@@ -114,6 +130,8 @@ class Dispatcher:
             )
             return
         path: str = scope["path"]
+        if self.on_projection_port(scope):
+            scope.setdefault("state", {})["projection_port"] = True
         t0 = time.monotonic()
         status = {"code": 0}
 
@@ -221,6 +239,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
             settings.max_inspect_body_bytes,
             capture_content=settings.capture_content,
             content_max_bytes=settings.content_max_bytes,
+            projection_model_suffix=settings.projection_model_suffix,
         )
         app.state.ctx = AppContext(
             settings,
@@ -230,6 +249,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
             poller,
             proxy,
             WebSocketProxy(settings.gufo_base_url, settings.upstream_connect_timeout),
+            HostTelemetry(),
         )
         writer.start()
         if settings.enable_poller:
@@ -282,7 +302,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
         return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    return Dispatcher(app, settings.dashboard_allowed_hosts)
+    return Dispatcher(app, settings.dashboard_allowed_hosts, settings.projection_port)
 
 
 def main() -> None:
@@ -290,17 +310,27 @@ def main() -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     settings = Settings.from_env()
-    uvicorn.run(
-        create_app(settings),
-        host=settings.dashboard_host,
-        port=settings.dashboard_port,
-        access_log=False,
-        server_header=False,
-        date_header=False,
-        proxy_headers=False,
-        log_config=None,
-        timeout_graceful_shutdown=10,
-    )
+    options: dict[str, Any] = {
+        "host": settings.dashboard_host,
+        "access_log": False,
+        "server_header": False,
+        "date_header": False,
+        "proxy_headers": False,
+        "log_config": None,
+        "timeout_graceful_shutdown": 10,
+    }
+    config = uvicorn.Config(create_app(settings), port=settings.dashboard_port, **options)
+    sockets = [config.bind_socket()]
+    if settings.projection_port is not None:
+        # One server and app for both listeners; Dispatcher tells them apart
+        # by the accepting socket's port.
+        sockets.append(
+            uvicorn.Config(config.app, port=settings.projection_port, **options).bind_socket()
+        )
+        log.info(
+            "projection port %d: chat completions default to projection", settings.projection_port
+        )
+    uvicorn.Server(config).run(sockets=sockets)
 
 
 if __name__ == "__main__":

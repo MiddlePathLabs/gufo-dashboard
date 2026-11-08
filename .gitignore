@@ -8,6 +8,9 @@ data/
 .env
 .env.*
 !.env.example
+# Per-machine Compose overrides; docker compose loads this file automatically.
+docker-compose.override.yml
+compose.override.yml
 *.egg-info/
 build/
 dist/
